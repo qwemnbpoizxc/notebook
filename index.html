@@ -283,6 +283,7 @@
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
     <button id="loginBtn">登 录</button>
+    <button id="guestBtn" style="margin-top:6px;background:#EBE8E6;color:#5C5957;border:1.5px solid #D5D2D0;">👤 访客模式（仅本地存储）</button>
     <div class="login-err" id="loginErr"></div>
   </div>
 </div>
@@ -1513,6 +1514,17 @@ const loginErr=document.getElementById('loginErr');
 
 loginBtn.addEventListener('click',doLogin);
 loginPass.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+document.getElementById('guestBtn').addEventListener('click',enterGuest);
+
+function enterGuest(){logoutBtn.style.display='none';
+  currentUser='__guest__';sessionToken='';
+  localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
+  loginOverlay.style.display='none';
+      logoutBtn.style.display='';
+  storageIndicator.textContent='👤 访客模式（仅本地）';
+  renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+  todoInput.focus();
+}
 
 async function doLogin(){
   const u=loginUser.value.trim();const p=loginPass.value;
@@ -1533,6 +1545,7 @@ async function doLogin(){
       localStorage.setItem('sync_user',u);
       localStorage.setItem('sync_token',h);
       loginOverlay.style.display='none';
+      logoutBtn.style.display='';
       storageIndicator.textContent='☁️ 加载中…';
       await pullFromCloud();
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
@@ -1571,6 +1584,8 @@ function logout(){
   localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
   loginUser.value='';loginPass.value='';
   loginOverlay.style.display='flex';
+  loginUser.focus();
+  storageIndicator.textContent='💻 浏览器存储';
 }
 
 async function sbUpsert(table,body){
@@ -1594,7 +1609,7 @@ async function sbGet(table,eqCol,eqVal){
 }
 
 async function pushToCloud(){
-  if(!currentUser)return;
+  if(!currentUser||currentUser==='__guest__')return;
   const payload={todos,countdowns,countups,labels,updatedAt:Date.now()};
   const ok=await sbUpsert('user_data',{user_id:currentUser,data:payload});
   if(ok){
@@ -1635,30 +1650,55 @@ function syncToCloud(){
   _syncTimer=setTimeout(pushToCloud,1500);
 }
 
-// Hook renders
-const _rt=renderTodo;renderTodo=function(){_rt();syncToCloud();};
-const _rc=renderCd;renderCd=function(){_rc();syncToCloud();};
-const _rcu=renderCu;renderCu=function(){_rcu();syncToCloud();};
-const _rp=renderPie;renderPie=function(){_rp();syncToCloud();};
+// Hook renders (only sync if logged in)
+const _rt=renderTodo;renderTodo=function(){_rt();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+const _rc=renderCd;renderCd=function(){_rc();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+const _rcu=renderCu;renderCu=function(){_rcu();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+const _rp=renderPie;renderPie=function(){_rp();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
 
-// Logout button in footer
+// Logout button in footer (show when logged in, hide for guest)
 const logoutBtn=document.createElement('button');
 logoutBtn.textContent='👤 退出登录';
+logoutBtn.id='logoutBtn';
 logoutBtn.style.cssText='color:#C49090;';
 logoutBtn.addEventListener('click',logout);
 document.querySelector('.file-area').appendChild(logoutBtn);
+// logout handled inside doLogin  enterGuest
+
+// logout shown after login
+document.getElementById('guestBtn').addEventListener('click',()=>{});
 
 // =================== 初始化 ===================
-(async function init(){
-  const loggedIn=await verifySession();
-  if(loggedIn){
-    loginOverlay.style.display='none';
-    storageIndicator.textContent='☁️ 加载中…';
-    try{await pullFromCloud();}catch(e){console.error(e);}
+(function init(){
+  // Always show login overlay first, try auto-login in background
+  const token=localStorage.getItem('sync_token');
+  if(token){
+    // Has saved session, try silent login
+    verifySession().then(loggedIn=>{
+      if(loggedIn){
+        loginOverlay.style.display='none';
+      logoutBtn.style.display='';
+        storageIndicator.textContent='☁️ 加载中…';
+        pullFromCloud().then(()=>{
+          renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+          syncToCloud();todoInput.focus();
+        }).catch(()=>{
+          renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+          loginOverlay.style.display='flex';loginUser.focus();
+        });
+      }else{
+        renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+        loginUser.focus();
+      }
+    }).catch(()=>{
+      // Network failed — show login
+      renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+      loginUser.focus();
+    });
+  }else{
+    renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+    loginUser.focus();
   }
-  renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-  if(loggedIn)syncToCloud();
-  else loginUser.focus();
 })();
 </script>
 </body>
