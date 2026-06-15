@@ -1798,7 +1798,7 @@ document.getElementById('guestBtn').addEventListener('click',()=>{});
 // =================== 初始化 ===================
 (function init(){
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-  const _tp=extractTimerPending();applyPendingTimer(_tp);
+  // Timer restored in login/guest flows
   loginUser.focus();
 })();
 
