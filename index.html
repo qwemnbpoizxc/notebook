@@ -278,7 +278,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-12</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-13</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1832,33 +1832,38 @@ function _setupReadOnlyUI(){
   d.style.cssText='background:#C49090;color:#FDFBFA;text-align:center;padding:5px 10px;font-size:13px;font-weight:600;';
   d.textContent='🔒 只读模式 — 已有另一设备/窗口在操作';
   const c=document.querySelector('.container');if(c)c.insertBefore(d,c.firstChild);
-  // Disable ALL interactive elements first
-  const all=document.querySelectorAll('.container input,.container select,.container button,.check-box,.delete-btn,.timer-btn,.color-swatch,.color-custom-btn,.color-pick-trigger,.existing-label');
-  all.forEach(x=>{if(!x.closest('#roBanner'))x.style.pointerEvents='none';});
-  // Re-enable nav, filters, time period, login/logout
-  document.querySelectorAll('#prevDayBtn,#nextDayBtn,#backTodayBtn,#viewDateDisplay,.tp-btn,.filter-btn,#logoutBtn,#loginBtn,#guestBtn')
-  .forEach(x=>x.style.pointerEvents='');
-  document.addEventListener('click',_roBlock,true);
-  document.addEventListener('dblclick',_roBlock,true);
-  document.addEventListener('keydown',_roBlock,true);
-  document.addEventListener('change',_roBlock,true);
+
+  // Collect all interactive descendants EXCEPT safe controls
+  const safe='#prevDayBtn,#nextDayBtn,#backTodayBtn,#viewDateDisplay,.tp-btn,.filter-btn,#logoutBtn,#loginBtn,#guestBtn,.pie-legend-group,.pie-legend-item';
+  const safeEls=new Set(document.querySelectorAll(safe));
+
+  // 1) All input / select / button / textarea → disabled (except safe)
+  document.querySelectorAll('.container input,.container select,.container button,.container textarea').forEach(x=>{
+    if(safeEls.has(x))return;
+    x.disabled=true;
+    if(x.tagName==='INPUT'||x.tagName==='TEXTAREA')x.readOnly=true;
+  });
+
+  // 2) Pointer-events none on everything not explicitly safe
+  const allInteractive=document.querySelectorAll('.container *');
+  allInteractive.forEach(x=>{
+    if(safeEls.has(x)){x.style.pointerEvents='auto';return;}
+    const tag=x.tagName;
+    if(tag==='INPUT'||tag==='SELECT'||tag==='BUTTON'||tag==='TEXTAREA'||x.classList.contains('check-box')||x.classList.contains('delete-btn')||x.classList.contains('timer-btn')||x.classList.contains('color-swatch')||x.classList.contains('color-custom-btn')||x.classList.contains('color-pick-trigger')||x.classList.contains('existing-label')||x.classList.contains('todo-item')){
+      x.style.pointerEvents='none';
+    }
+  });
+
+  // 3) Safe controls: explicitly enable pointer events + z-index above main body
+  safeEls.forEach(x=>{if(x){x.style.pointerEvents='auto';x.style.position='relative';x.style.zIndex='60';}});
+  document.querySelectorAll('.tp-btn,.filter-btn').forEach(x=>{x.style.pointerEvents='auto';x.style.position='relative';x.style.zIndex='60';});
+
   if(activeTimer)pauseTimer();
-}
-function _roBlock(e){
-  if(!document.getElementById('roBanner'))return;
-  const el=e.target.closest('.todo-item,.check-box,.delete-btn,.timer-btn,.timer-input,.edit-input,.count-card,.count-edit-input,.label-select,.color-swatch,.color-custom-btn,.color-pick-trigger,.existing-label,.todo-text,.todo-sub');
-  if(!el)return;
-  const safe=document.querySelectorAll('#prevDayBtn,#nextDayBtn,#backTodayBtn,#viewDateDisplay,.tp-btn,.filter-btn,#loginBtn,#guestBtn,#logoutBtn,.pie-legend-group,.pie-legend-item');
-  for(const s of safe){if(s.contains(el))return;}
-  e.stopImmediatePropagation();e.preventDefault();
 }
 function _removeReadOnlyUI(){
   const d=document.getElementById('roBanner');if(d)d.remove();
-  document.querySelectorAll('[style*="pointer-events: none"]').forEach(x=>x.style.pointerEvents='');
-  document.removeEventListener('click',_roBlock,true);
-  document.removeEventListener('dblclick',_roBlock,true);
-  document.removeEventListener('keydown',_roBlock,true);
-  document.removeEventListener('change',_roBlock,true);
+  document.querySelectorAll('.container input,.container select,.container button,.container textarea').forEach(x=>{x.disabled=false;x.readOnly=false;});
+  document.querySelectorAll('.container *').forEach(x=>{if(x.style.pointerEvents==='none')x.style.pointerEvents='';if(x.style.zIndex==='60')x.style.zIndex='';if(x.style.position==='relative')x.style.position='';});
 }
 
 async function _tryBecomeMaster(){
