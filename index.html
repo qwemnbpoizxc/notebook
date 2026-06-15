@@ -1452,9 +1452,95 @@ fileInput.addEventListener('change',()=>{
 exportBtn.addEventListener('click',exportToFile);
 importBtn.addEventListener('click',importFromFile);
 
-// =================== 初始化 ===================
+// =================== 云端同步 ===================
+const SUPABASE_URL='https://arfzdesqtgjlecgworob.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFyZnpkZXNxdGdqbGVjZ3dvcm9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0Nzk2NjYsImV4cCI6MjA5NzA1NTY2Nn0.dfOgDLa1W8IyYD0Zzlx5_bU58z29aCJjonVEauEzHco';
+const sb=window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY):null;
+
+let currentUser=localStorage.getItem('sync_user')||'';
+
+// Ensure user exists in DB
+async function ensureUser(){
+  if(!sb||!currentUser)return;
+  try{await sb.from('users').upsert({id:currentUser}).select();}catch(e){}
+}
+
+// Push all data to cloud
+async function pushToCloud(){
+  if(!sb||!currentUser)return;
+  const payload={todos,countdowns,countups,labels,updatedAt:Date.now()};
+  try{
+    await sb.from('user_data').upsert({user_id:currentUser,data:payload});
+    storageIndicator.textContent='☁️ 已同步';
+    storageIndicator.classList.add('file-mode');
+    setTimeout(()=>{storageIndicator.textContent='💻 浏览器存储';storageIndicator.classList.remove('file-mode');},2000);
+  }catch(e){storageIndicator.textContent='⚠️ 同步失败';console.error(e);}
+}
+
+// Pull data from cloud
+async function pullFromCloud(){
+  if(!sb||!currentUser)return false;
+  try{
+    const{data,error}=await sb.from('user_data').select('data').eq('user_id',currentUser).maybeSingle();
+    if(error||!data||!data.data)return false;
+    const rd=data.data;
+    if(rd.todos)todos=rd.todos;
+    if(rd.countdowns)countdowns=rd.countdowns;
+    if(rd.countups)countups=rd.countups;
+    if(rd.labels)labels=rd.labels;
+    saveTodos();saveCd();saveCu();saveLabels();
+    storageIndicator.textContent='☁️ 已加载云端数据';
+    storageIndicator.classList.add('file-mode');
+    setTimeout(()=>{storageIndicator.textContent='💻 浏览器存储';storageIndicator.classList.remove('file-mode');},2000);
+    return true;
+  }catch(e){console.error(e);return false;}
+}
+
+// Auto-save wrapper: save locally + push to cloud
 function saveTodos(){saveList(SK,todos);}
-renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();todoInput.focus();
+const _saveCd=saveCd;saveCd=function(){saveList(CDK,countdowns);};
+const _saveCu=saveCu;saveCu=function(){saveList(CUK,countups);};
+const _saveLabels=saveLabels;saveLabels=function(){localStorage.setItem('my_labels',JSON.stringify(labels));};
+
+// Debounced cloud sync
+let syncTimer=null;
+function syncToCloud(){
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(()=>{pushToCloud();},800);
+}
+
+// Hook into all data-changing functions to trigger sync
+const origRenderTodo=renderTodo;renderTodo=function(){origRenderTodo();syncToCloud();};
+const origRenderCd=renderCd;renderCd=function(){origRenderCd();syncToCloud();};
+const origRenderCu=renderCu;renderCu=function(){origRenderCu();syncToCloud();};
+const origRenderPie=renderPie;renderPie=function(){origRenderPie();syncToCloud();};
+
+// User setup
+function setupUser(){
+  if(currentUser)return;
+  const name=(prompt('👤 请输入你的用户名（用于跨设备同步）：','')||'').trim();
+  if(!name)return;
+  currentUser=name;
+  localStorage.setItem('sync_user',name);
+  ensureUser();
+  // Push current data to cloud
+  const payload={todos,countdowns,countups,labels,updatedAt:Date.now()};
+  if(sb)sb.from('user_data').upsert({user_id:currentUser,data:payload}).then(()=>{pushToCloud();});
+}
+
+// =================== 初始化 ===================
+(async function init(){
+  setupUser();
+  if(currentUser){
+    storageIndicator.textContent='☁️ 加载中…';
+    await pullFromCloud();
+    await ensureUser();
+  }
+  renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+  if(currentUser)syncToCloud();
+  todoInput.focus();
+})();
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </body>
 </html>
