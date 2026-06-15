@@ -1604,6 +1604,7 @@ async function doLogin(){
       storageIndicator.textContent='☁️ 加载中…';
       clearAllData();
       await pullFromCloud();
+      restoreTimer();
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
       syncToCloud();
       todoInput.focus();
@@ -1718,7 +1719,7 @@ window.addEventListener('beforeunload',()=>{
   if(activeTimer){const id=activeTimer.todoId;pauseTimer();saveTimerState();}
 });
 
-(function restoreTimer(){
+function restoreTimer(){
   const raw=localStorage.getItem('_timer_state');
   if(!raw)return;
   try{
@@ -1739,7 +1740,7 @@ window.addEventListener('beforeunload',()=>{
     }
     localStorage.removeItem('_timer_state');
   }catch(e){}
-})();
+}
 
 function saveTodos(){saveList(SK,todos);}
 
@@ -1770,6 +1771,7 @@ document.getElementById('guestBtn').addEventListener('click',()=>{});
 // =================== 初始化 ===================
 (function init(){
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+  restoreTimer();
   loginUser.focus();
 })();
 

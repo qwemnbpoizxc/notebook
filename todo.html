@@ -1592,6 +1592,7 @@ async function doLogin(){
       storageIndicator.textContent='☁️ 加载中…';
       clearAllData();
       await pullFromCloud();
+      restoreTimer();
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
       syncToCloud();
       todoInput.focus();
@@ -1735,34 +1736,33 @@ window.addEventListener('beforeunload',()=>{
 });
 
 // Restore timer state on load
-(function restoreTimer(){
+// Restore timer state that was active before page close
+function restoreTimer(){
   const raw=localStorage.getItem('_timer_state');
   if(!raw)return;
+  localStorage.removeItem('_timer_state');
   try{
     const s=JSON.parse(raw);
     const t=todos.find(x=>x.id===s.todoId);
-    if(t){
-      // Timer was active when page closed - save the partial time
-      const elapsed=Math.floor((Date.now()-s.startTime)/1000);
-      if(elapsed>5){// Only save if more than 5 seconds elapsed
-        if(!t.timeLogs)t.timeLogs=[];
-        // Merge with existing today's log: take the max
-        const today=realToday();let existing=0;
-        for(const l of t.timeLogs){if(l.date===today)existing+=l.seconds;}
-        if(elapsed>existing){
-          t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
-          t.timeLogs.push({date:today,seconds:elapsed});
-        }
-      }
-      saveTodos();renderPie();
+    if(!t)return;
+    const elapsed=Math.floor((Date.now()-s.startTime)/1000);
+    if(elapsed<5)return;
+    if(!t.timeLogs)t.timeLogs=[];
+    const today=realToday();
+    let existing=0;
+    for(const l of t.timeLogs){if(l.date===today)existing+=l.seconds;}
+    if(elapsed>existing){
+      t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
+      t.timeLogs.push({date:today,seconds:elapsed});
+      saveTodos();syncToCloud();
     }
-    localStorage.removeItem('_timer_state');
   }catch(e){}
-})();
+}
 
 // =================== 初始化 ===================
 (function init(){
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+  restoreTimer();
   loginUser.focus();
 })();
 </script>
