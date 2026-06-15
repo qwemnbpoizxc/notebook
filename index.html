@@ -456,14 +456,17 @@ function getLabelColor(id){
 let activeTimer=null; // {todoId, startTime}
 let tickInterval=null;
 
+// Persist timer state to survive page close
+function saveTimerState(){
+  if(activeTimer)localStorage.setItem('_timer_state',JSON.stringify(activeTimer));
+  else localStorage.removeItem('_timer_state');
+}
+
 function startTimer(id){
   if(activeTimer){stopTimer();}
   activeTimer={todoId:id,startTime:Date.now()};
+  saveTimerState();
   if(!tickInterval){tickInterval=setInterval(tick,1000);}
-  // Update button class only
-  document.querySelectorAll('.timer-btn.playing').forEach(b=>b.classList.remove('playing'));
-  const btn=todoList.querySelector(`[data-id="${id}"] .timer-btn`);
-  if(btn)btn.classList.add('playing');
 }
 function stopTimer(){
   if(!activeTimer)return;
@@ -480,7 +483,7 @@ function stopTimer(){
   if(btn)btn.classList.remove('playing');
   activeTimer=null;
   clearInterval(tickInterval);tickInterval=null;
-  saveTodos();renderTodo();renderPie();
+  saveTimerState();saveTodos();renderTodo();renderPie();
 }
 function pauseTimer(){
   if(!activeTimer)return;
@@ -497,7 +500,7 @@ function pauseTimer(){
   if(btn)btn.classList.remove('playing');
   activeTimer=null;
   clearInterval(tickInterval);tickInterval=null;
-  saveTodos();renderPie();renderTodo();
+  saveTimerState();saveTodos();renderPie();renderTodo();
 }
 function tick(){
   if(!activeTimer)return;
@@ -1673,7 +1676,22 @@ async function pullFromCloud(){
       const lb=labels.find(l=>l.name===t.label);t.label=lb?lb.id:0;
     }
   }
-  if(rd.todos)todos=rd.todos;
+  // Merge cloud data with local: for timeLogs, take the one with more total seconds
+  if(rd.todos){
+    const cmap={};for(const t of rd.todos)cmap[t.id]=t;
+    for(const t of todos){
+      if(cmap[t.id]){
+        const ct=cmap[t.id];
+        const cTotal=(ct.timeLogs||[]).reduce((s,l)=>s+l.seconds,0);
+        const lTotal=(t.timeLogs||[]).reduce((s,l)=>s+l.seconds,0);
+        if(lTotal>cTotal)t.timeLogs=t.timeLogs;// keep local (more complete)
+        else{t.timeLogs=ct.timeLogs;t.done=ct.done;t.doneDate=ct.doneDate;t.skipDates=ct.skipDates;}
+        delete cmap[t.id];
+      }
+    }
+    // Add cloud-only todos
+    for(const[_,ct]of Object.entries(cmap))todos.push(ct);
+  }
   if(rd.countdowns)countdowns=rd.countdowns;
   if(rd.countups)countups=rd.countups;
   if(rd.labels)labels=rd.labels;
@@ -1710,6 +1728,37 @@ document.querySelector('.file-area').appendChild(logoutBtn);
 
 // logout shown after login
 document.getElementById('guestBtn').addEventListener('click',()=>{});
+
+// =================== 页面关闭时暂停计时 & 恢复计时 ===================
+window.addEventListener('beforeunload',()=>{
+  if(activeTimer){const id=activeTimer.todoId;pauseTimer();saveTimerState();}
+});
+
+// Restore timer state on load
+(function restoreTimer(){
+  const raw=localStorage.getItem('_timer_state');
+  if(!raw)return;
+  try{
+    const s=JSON.parse(raw);
+    const t=todos.find(x=>x.id===s.todoId);
+    if(t){
+      // Timer was active when page closed - save the partial time
+      const elapsed=Math.floor((Date.now()-s.startTime)/1000);
+      if(elapsed>5){// Only save if more than 5 seconds elapsed
+        if(!t.timeLogs)t.timeLogs=[];
+        // Merge with existing today's log: take the max
+        const today=realToday();let existing=0;
+        for(const l of t.timeLogs){if(l.date===today)existing+=l.seconds;}
+        if(elapsed>existing){
+          t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
+          t.timeLogs.push({date:today,seconds:elapsed});
+        }
+      }
+      saveTodos();renderPie();
+    }
+    localStorage.removeItem('_timer_state');
+  }catch(e){}
+})();
 
 // =================== 初始化 ===================
 (function init(){

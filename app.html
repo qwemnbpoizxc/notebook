@@ -472,14 +472,16 @@ function getLabelColor(id){
 let activeTimer=null; // {todoId, startTime}
 let tickInterval=null;
 
+function saveTimerState(){
+  if(activeTimer)localStorage.setItem('_timer_state',JSON.stringify(activeTimer));
+  else localStorage.removeItem('_timer_state');
+}
+
 function startTimer(id){
   if(activeTimer){stopTimer();}
   activeTimer={todoId:id,startTime:Date.now()};
+  saveTimerState();
   if(!tickInterval){tickInterval=setInterval(tick,1000);}
-  // Update button class only
-  document.querySelectorAll('.timer-btn.playing').forEach(b=>b.classList.remove('playing'));
-  const btn=todoList.querySelector(`[data-id="${id}"] .timer-btn`);
-  if(btn)btn.classList.add('playing');
 }
 function stopTimer(){
   if(!activeTimer)return;
@@ -491,12 +493,10 @@ function stopTimer(){
       t.timeLogs.push({date:realToday(),seconds:elapsed});
     }
   }
-  // Remove playing class
   const btn=todoList.querySelector(`[data-id="${activeTimer.todoId}"] .timer-btn`);
   if(btn)btn.classList.remove('playing');
-  activeTimer=null;
-  clearInterval(tickInterval);tickInterval=null;
-  saveTodos();renderTodo();renderPie();
+  activeTimer=null;clearInterval(tickInterval);tickInterval=null;
+  saveTimerState();saveTodos();renderTodo();renderPie();
 }
 function pauseTimer(){
   if(!activeTimer)return;
@@ -511,9 +511,8 @@ function pauseTimer(){
   }
   const btn=todoList.querySelector(`[data-id="${id}"] .timer-btn`);
   if(btn)btn.classList.remove('playing');
-  activeTimer=null;
-  clearInterval(tickInterval);tickInterval=null;
-  saveTodos();renderPie();renderTodo();
+  activeTimer=null;clearInterval(tickInterval);tickInterval=null;
+  saveTimerState();saveTodos();renderPie();renderTodo();
 }
 function tick(){
   if(!activeTimer)return;
@@ -1689,7 +1688,20 @@ async function pullFromCloud(){
       const lb=labels.find(l=>l.name===t.label);t.label=lb?lb.id:0;
     }
   }
-  if(rd.todos)todos=rd.todos;
+  if(rd.todos){
+    const cmap={};for(const t of rd.todos)cmap[t.id]=t;
+    for(const t of todos){
+      if(cmap[t.id]){
+        const ct=cmap[t.id];
+        const cTotal=(ct.timeLogs||[]).reduce((s,l)=>s+l.seconds,0);
+        const lTotal=(t.timeLogs||[]).reduce((s,l)=>s+l.seconds,0);
+        if(lTotal>cTotal)t.timeLogs=t.timeLogs;
+        else{t.timeLogs=ct.timeLogs;t.done=ct.done;t.doneDate=ct.doneDate;t.skipDates=ct.skipDates;}
+        delete cmap[t.id];
+      }
+    }
+    for(const[_,ct]of Object.entries(cmap))todos.push(ct);
+  }
   if(rd.countdowns)countdowns=rd.countdowns;
   if(rd.countups)countups=rd.countups;
   if(rd.labels)labels=rd.labels;
@@ -1700,6 +1712,34 @@ async function pullFromCloud(){
   setTimeout(()=>{storageIndicator.textContent='💻 浏览器存储';storageIndicator.classList.remove('file-mode');},2000);
   return true;
 }
+
+// =================== 页面关闭时暂停计时 & 恢复计时 ===================
+window.addEventListener('beforeunload',()=>{
+  if(activeTimer){const id=activeTimer.todoId;pauseTimer();saveTimerState();}
+});
+
+(function restoreTimer(){
+  const raw=localStorage.getItem('_timer_state');
+  if(!raw)return;
+  try{
+    const s=JSON.parse(raw);
+    const t=todos.find(x=>x.id===s.todoId);
+    if(t){
+      const elapsed=Math.floor((Date.now()-s.startTime)/1000);
+      if(elapsed>5){
+        if(!t.timeLogs)t.timeLogs=[];
+        const today=realToday();let existing=0;
+        for(const l of t.timeLogs){if(l.date===today)existing+=l.seconds;}
+        if(elapsed>existing){
+          t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
+          t.timeLogs.push({date:today,seconds:elapsed});
+        }
+      }
+      saveTodos();renderPie();
+    }
+    localStorage.removeItem('_timer_state');
+  }catch(e){}
+})();
 
 function saveTodos(){saveList(SK,todos);}
 
