@@ -504,7 +504,6 @@ function pauseTimer(){
 }
 
 function _applyAccumulated(data){
-  // 把 _timer_state 中的 accumulated 写入 timeLogs（永久保存）
   if(!data||!data.accumulated||data.accumulated<=0)return;
   const t=todos.find(x=>x.id===data.todoId);
   if(!t)return;
@@ -515,19 +514,21 @@ function _applyAccumulated(data){
     t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
     t.timeLogs.push({date:today,seconds:data.accumulated});
   }
-  // 重置 _timer_state 的 accumulated 为 0
-  data.accumulated=0;
-  if(activeTimer)data.startTime=Date.now();
-  localStorage.setItem('_timer_state',JSON.stringify(data));
+  // 写入 timeLogs 后，重置 _timer_state：只保留 todoId，accumulated=0，startTime=null
+  localStorage.setItem('_timer_state',JSON.stringify({todoId:data.todoId,accumulated:0,startTime:null}));
 }
 
 function tick(){
   if(!activeTimer)return;
   const t=todos.find(x=>x.id===activeTimer.todoId);
   if(!t){stopTimer();return;}
+  // 显示 = timeLogs 今日已有秒数 + 当前 session 的 running 秒数 + _timer_state.accumulated（如果有）
+  let base=0;const today=realToday();
+  if(t.timeLogs){for(const l of t.timeLogs){if(l.date===today)base+=l.seconds;}}
   const data=_readTimerFile();
   const acc=data&&data.accumulated?data.accumulated:0;
-  const sec=acc+(isViewingToday()?Math.floor((Date.now()-activeTimer.startTime)/1000):0);
+  const running=isViewingToday()?Math.floor((Date.now()-activeTimer.startTime)/1000):0;
+  const sec=base+acc+running;
   const el=todoList.querySelector(`[data-id="${activeTimer.todoId}"] .timer-display`);
   if(el)el.textContent=fmtDuration(sec);
 }
