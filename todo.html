@@ -294,7 +294,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-8</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-9</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -494,7 +494,7 @@ function stopTimer(){
   activeTimer=null;clearInterval(tickInterval);tickInterval=null;
   const btn=todoList.querySelector('.timer-btn.playing');if(btn)btn.classList.remove('playing');
   localStorage.removeItem('_timer_state');
-  saveTodos();renderTodo();renderPie();
+  renderTodo();renderPie();
 }
 
 function pauseTimer(){stopTimer();}
@@ -510,6 +510,7 @@ function _syncTimerToLogs(){
   const existing=t.timeLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.seconds,0);
   t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
   t.timeLogs.push({date:today,seconds:existing+elapsed});
+  saveTodos(); // ← 立即持久化，beforeunload 中必须同步写入
 }
 
 function tick(){

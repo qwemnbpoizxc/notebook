@@ -304,7 +304,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-8</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-9</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -504,7 +504,7 @@ function stopTimer(){
   activeTimer=null;clearInterval(tickInterval);tickInterval=null;
   const btn=todoList.querySelector('.timer-btn.playing');if(btn)btn.classList.remove('playing');
   localStorage.removeItem('_timer_state');
-  saveTodos();renderTodo();renderPie();
+  renderTodo();renderPie();
 }
 
 function pauseTimer(){stopTimer();}
@@ -520,6 +520,7 @@ function _syncTimerToLogs(){
   const existing=t.timeLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.seconds,0);
   t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
   t.timeLogs.push({date:today,seconds:existing+elapsed});
+  saveTodos(); // ← 立即持久化，beforeunload 中必须同步写入
 }
 
 function tick(){
@@ -1982,7 +1983,7 @@ function _cleanupSession(uname){
 })();
 
 // =================== PWA ==================
-if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v26").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
+if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v27").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
 const mb=URL.createObjectURL(new Blob([JSON.stringify({name:'计划清单',short_name:'计划清单',start_url:'/notebook/app.html',scope:'/notebook/',display:'standalone',orientation:'any',background_color:'#8E9AAF',theme_color:'#8E9AAF',icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]})],{type:'application/json'}));const el=document.createElement('link');el.rel='manifest';el.href=mb;document.head.appendChild(el);
 let _dpi=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;const p=document.getElementById('installPrompt');p.style.display='flex';p.onclick=()=>{_dpi.prompt();p.style.display='none';};});window.addEventListener('appinstalled',()=>{document.getElementById('installPrompt').style.display='none';});
 </script>
