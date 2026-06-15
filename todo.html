@@ -363,7 +363,6 @@
   <input type="file" id="fileInput" accept=".json">
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 // =================== 工具函数 ===================
 const WDAY=['日','一','二','三','四','五','六'];
@@ -1453,58 +1452,85 @@ fileInput.addEventListener('change',()=>{
 exportBtn.addEventListener('click',exportToFile);
 importBtn.addEventListener('click',importFromFile);
 
-// =================== 云端同步 ===================
-const SUPABASE_URL='https://arfzdesqtgjlecgworob.supabase.co';
-const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFyZnpkZXNxdGdqbGVjZ3dvcm9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0Nzk2NjYsImV4cCI6MjA5NzA1NTY2Nn0.dfOgDLa1W8IyYD0Zzlx5_bU58z29aCJjonVEauEzHco';
-let sb=null;
-try{sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);}catch(e){}
+// =================== 云端同步 (Supabase REST API) ===================
+const SB_URL='https://arfzdesqtgjlecgworob.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFyZnpkZXNxdGdqbGVjZ3dvcm9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0Nzk2NjYsImV4cCI6MjA5NzA1NTY2Nn0.dfOgDLa1W8IyYD0Zzlx5_bU58z29aCJjonVEauEzHco';
 
 let currentUser=localStorage.getItem('sync_user')||'';
 
+async function sbPost(path,body){
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/'+path,{
+      method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
+      body:JSON.stringify(body)
+    });
+    return r.ok;
+  }catch(e){console.error('sync POST err:',e);return false;}
+}
+
+async function sbUpsert(table,body){
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/'+table,{
+      method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},
+      body:JSON.stringify(body)
+    });
+    return r.ok;
+  }catch(e){console.error('sync upsert err:',e);return false;}
+}
+
+async function sbGet(table,eqCol,eqVal){
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/'+table+'?'+eqCol+'=eq.'+encodeURIComponent(eqVal)+'&select=*',{
+      headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}
+    });
+    if(!r.ok)return null;
+    return await r.json();
+  }catch(e){console.error('sync GET err:',e);return null;}
+}
+
 async function ensureUser(){
-  if(!sb||!currentUser)return;
-  try{await sb.from('users').upsert({id:currentUser});}catch(e){}
+  if(!currentUser)return;
+  await sbUpsert('users',{id:currentUser});
 }
 
 async function pushToCloud(){
-  if(!sb||!currentUser)return;
+  if(!currentUser)return;
   const payload={todos,countdowns,countups,labels,updatedAt:Date.now()};
-  try{
-    await sb.from('user_data').upsert({user_id:currentUser,data:payload});
+  const ok=await sbUpsert('user_data',{user_id:currentUser,data:payload});
+  if(ok){
     storageIndicator.textContent='☁️ 已同步';
     storageIndicator.classList.add('file-mode');
     setTimeout(()=>{storageIndicator.textContent='💻 浏览器存储';storageIndicator.classList.remove('file-mode');},2000);
-  }catch(e){storageIndicator.textContent='⚠️ 同步失败';console.error(e);}
+  }else{
+    storageIndicator.textContent='⚠️ 同步失败';
+  }
 }
 
 async function pullFromCloud(){
-  if(!sb||!currentUser)return false;
-  try{
-    const{data,error}=await sb.from('user_data').select('data').eq('user_id',currentUser).maybeSingle();
-    if(error||!data||!data.data)return false;
-    const rd=data.data;
-    if(rd.todos)todos=rd.todos;
-    if(rd.countdowns)countdowns=rd.countdowns;
-    if(rd.countups)countups=rd.countups;
-    if(rd.labels)labels=rd.labels;
-    saveList(SK,todos);saveList(CDK,countdowns);saveList(CUK,countups);
-    localStorage.setItem('my_labels',JSON.stringify(labels));
-    storageIndicator.textContent='☁️ 已加载云端数据';
-    storageIndicator.classList.add('file-mode');
-    setTimeout(()=>{storageIndicator.textContent='💻 浏览器存储';storageIndicator.classList.remove('file-mode');},2000);
-    return true;
-  }catch(e){console.error(e);return false;}
+  if(!currentUser)return false;
+  const rows=await sbGet('user_data','user_id',currentUser);
+  if(!rows||rows.length===0)return false;
+  const rd=rows[0].data;
+  if(!rd)return false;
+  if(rd.todos)todos=rd.todos;
+  if(rd.countdowns)countdowns=rd.countdowns;
+  if(rd.countups)countups=rd.countups;
+  if(rd.labels)labels=rd.labels;
+  saveList(SK,todos);saveList(CDK,countdowns);saveList(CUK,countups);
+  localStorage.setItem('my_labels',JSON.stringify(labels));
+  storageIndicator.textContent='☁️ 已加载云端数据';
+  storageIndicator.classList.add('file-mode');
+  setTimeout(()=>{storageIndicator.textContent='💻 浏览器存储';storageIndicator.classList.remove('file-mode');},2000);
+  return true;
 }
 
-// Save locally (called by render functions)
 function saveTodos(){saveList(SK,todos);}
-// Save wrappers for CD/CU (already defined above as saveCd/saveCu/saveLabels)
 
-// Debounced sync — called after any data change
+// Debounced sync
 let _syncTimer=null;
 function syncToCloud(){
   clearTimeout(_syncTimer);
-  _syncTimer=setTimeout(pushToCloud,1000);
+  _syncTimer=setTimeout(pushToCloud,1500);
 }
 
 // Hook renders to trigger sync
@@ -1513,7 +1539,6 @@ const _rc=renderCd;renderCd=function(){_rc();syncToCloud();};
 const _rcu=renderCu;renderCu=function(){_rcu();syncToCloud();};
 const _rp=renderPie;renderPie=function(){_rp();syncToCloud();};
 
-// User setup
 async function setupUser(){
   if(currentUser)return;
   const name=(prompt('👤 请输入你的用户名（用于跨设备同步）：','')||'').trim();
