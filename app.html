@@ -304,7 +304,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-3</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-4</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1979,20 +1979,47 @@ function _startHeartbeat(uname){
     localStorage.setItem(key,JSON.stringify({sid:_sid,ts:Date.now()}));
   },5000);
 }
-function _cleanupSession(uname){
-  if(_hbTimer)clearInterval(_hbTimer);_hbTimer=null;
-  localStorage.removeItem('_master_'+uname);
-  _removeReadOnlyUI();isReadOnly=false;
-}
+
+let _roCheckTimer=null;
 
 function _initSessionCheck(uname){
   setTimeout(()=>{
     if(!_becomeMaster(uname)){
       isReadOnly=true;_setupReadOnlyUI();
+      _startAutoTakeoverCheck(uname);  // 定期检测主控是否离线
     }else{
       isReadOnly=false;_removeReadOnlyUI();_startHeartbeat(uname);
     }
   },800);
+}
+
+// 只读模式下每隔15秒检查主控心跳是否过期（>30秒无心跳）
+function _startAutoTakeoverCheck(uname){
+  if(_roCheckTimer)clearInterval(_roCheckTimer);
+  _roCheckTimer=setInterval(()=>{
+    const key='_master_'+uname;
+    const raw=localStorage.getItem(key);
+    if(!raw){_takeover(uname);return;}
+    try{
+      const p=JSON.parse(raw);
+      if(Date.now()-p.ts>30000){_takeover(uname);}
+    }catch(e){}
+  },15000);
+}
+
+function _takeover(uname){
+  if(_roCheckTimer)clearInterval(_roCheckTimer);
+  _becomeMaster(uname);
+  _removeReadOnlyUI();isReadOnly=false;
+  _startHeartbeat(uname);
+  showToast('🟢 主窗口已离线，本窗口接管为操作窗口');
+}
+
+function _cleanupSession(uname){
+  if(_hbTimer)clearInterval(_hbTimer);_hbTimer=null;
+  if(_roCheckTimer)clearInterval(_roCheckTimer);_roCheckTimer=null;
+  localStorage.removeItem('_master_'+uname);
+  _removeReadOnlyUI();isReadOnly=false;
 }
 
 // =================== 初始化 ===================
@@ -2002,7 +2029,7 @@ function _initSessionCheck(uname){
 })();
 
 // =================== PWA ==================
-if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v21").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
+if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v22").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
 const mb=URL.createObjectURL(new Blob([JSON.stringify({name:'计划清单',short_name:'计划清单',start_url:'/notebook/app.html',scope:'/notebook/',display:'standalone',orientation:'any',background_color:'#8E9AAF',theme_color:'#8E9AAF',icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]})],{type:'application/json'}));const el=document.createElement('link');el.rel='manifest';el.href=mb;document.head.appendChild(el);
 let _dpi=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;const p=document.getElementById('installPrompt');p.style.display='flex';p.onclick=()=>{_dpi.prompt();p.style.display='none';};});window.addEventListener('appinstalled',()=>{document.getElementById('installPrompt').style.display='none';});
 </script>
