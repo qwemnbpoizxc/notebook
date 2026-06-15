@@ -230,6 +230,32 @@
   .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#2C2927;color:#FDFBFA;padding:10px 24px;border-radius:20px;font-size:16px;z-index:999;animation:toastIn .3s ease,toastOut .3s ease 1.5s forwards;pointer-events:none;}
   @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(-20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
   @keyframes toastOut{from{opacity:1}to{opacity:0}}
+
+  /* ===== Login Overlay ===== */
+  .login-overlay{
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:linear-gradient(135deg,#8E9AAF,#8E7B8C);
+    display:flex;align-items:center;justify-content:center;z-index:1000;
+  }
+  .login-card{
+    background:#FDFBFA;border-radius:16px;padding:36px 32px;
+    width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.2);text-align:center;
+  }
+  .login-card h2{font-size:22px;color:#2C2927;margin-bottom:6px;}
+  .login-card .login-sub{font-size:13px;color:#908D8B;margin-bottom:20px;}
+  .login-card input{
+    display:block;width:100%;padding:10px 14px;margin-bottom:10px;
+    border:2px solid #D5D2D0;border-radius:10px;font-size:15px;outline:none;
+    transition:border-color .2s;
+  }
+  .login-card input:focus{border-color:#8E9AAF;}
+  .login-card button{
+    width:100%;padding:11px;background:linear-gradient(135deg,#8E9AAF,#8E7B8C);
+    color:#FDFBFA;border:none;border-radius:10px;font-size:16px;font-weight:600;
+    cursor:pointer;transition:transform .15s;margin-top:4px;
+  }
+  .login-card button:hover{transform:translateY(-1px);}
+  .login-card .login-err{color:#C49090;font-size:13px;margin-top:8px;min-height:20px;}
   /* Responsive: 手机 → 中栏在上, 左栏在中间, 右栏在最下 */
   @media(max-width:900px){
     .main-body{flex-direction:column;}
@@ -248,6 +274,18 @@
 </style>
 </head>
 <body>
+
+<!-- ===== Login Overlay ===== -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-card">
+    <h2>🔐 登录</h2>
+    <p class="login-sub">输入账号密码以访问你的计划清单</p>
+    <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
+    <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
+    <button id="loginBtn">登 录</button>
+    <div class="login-err" id="loginErr"></div>
+  </div>
+</div>
 
 <div class="container">
   <div class="header">
@@ -1452,20 +1490,87 @@ fileInput.addEventListener('change',()=>{
 exportBtn.addEventListener('click',exportToFile);
 importBtn.addEventListener('click',importFromFile);
 
-// =================== 云端同步 (Supabase REST API) ===================
+// =================== 云端同步 & 登录 ===================
 const SB_URL='https://arfzdesqtgjlecgworob.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFyZnpkZXNxdGdqbGVjZ3dvcm9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0Nzk2NjYsImV4cCI6MjA5NzA1NTY2Nn0.dfOgDLa1W8IyYD0Zzlx5_bU58z29aCJjonVEauEzHco';
 
-let currentUser=localStorage.getItem('sync_user')||'';
+let currentUser='';
+let sessionToken='';
 
-async function sbPost(path,body){
+// SHA-256 hash helper
+async function sha256(msg){
+  const buf=new TextEncoder().encode(msg);
+  const hash=await crypto.subtle.digest('SHA-256',buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// Login UI
+const loginOverlay=document.getElementById('loginOverlay');
+const loginUser=document.getElementById('loginUser');
+const loginPass=document.getElementById('loginPass');
+const loginBtn=document.getElementById('loginBtn');
+const loginErr=document.getElementById('loginErr');
+
+loginBtn.addEventListener('click',doLogin);
+loginPass.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+
+async function doLogin(){
+  const u=loginUser.value.trim();const p=loginPass.value;
+  if(!u||!p){loginErr.textContent='请输入用户名和密码';return;}
+  loginBtn.disabled=true;loginErr.textContent='验证中…';
+  const h=await sha256(p);
+  // Verify via RPC
   try{
-    const r=await fetch(SB_URL+'/rest/v1/'+path,{
-      method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
-      body:JSON.stringify(body)
+    const r=await fetch(SB_URL+'/rest/v1/rpc/check_login',{
+      method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({p_user:u,p_hash:h})
     });
-    return r.ok;
-  }catch(e){console.error('sync POST err:',e);return false;}
+    if(!r.ok){loginErr.textContent='服务器错误，请重试';loginBtn.disabled=false;return;}
+    const ok=await r.json();
+    if(ok===true||(Array.isArray(ok)&&ok.length>0&&ok[0])){
+      currentUser=u;
+      sessionToken=h;
+      localStorage.setItem('sync_user',u);
+      localStorage.setItem('sync_token',h);
+      loginOverlay.style.display='none';
+      storageIndicator.textContent='☁️ 加载中…';
+      await pullFromCloud();
+      renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+      syncToCloud();
+      todoInput.focus();
+    }else{
+      loginErr.textContent='用户名或密码错误';
+    }
+  }catch(e){loginErr.textContent='网络错误，请重试';console.error(e);}
+  loginBtn.disabled=false;
+}
+
+// Silently verify token on page load
+async function verifySession(){
+  const u=localStorage.getItem('sync_user');
+  const t=localStorage.getItem('sync_token');
+  if(!u||!t)return false;
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/rpc/check_login',{
+      method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({p_user:u,p_hash:t})
+    });
+    if(!r.ok)return false;
+    const ok=await r.json();
+    if(ok===true||(Array.isArray(ok)&&ok.length>0&&ok[0])){
+      currentUser=u;sessionToken=t;return true;
+    }
+  }catch(e){}
+  // Session expired — clear
+  localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
+  return false;
+}
+
+function logout(){
+  currentUser='';sessionToken='';
+  localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
+  loginUser.value='';loginPass.value='';
+  loginOverlay.style.display='flex';
 }
 
 async function sbUpsert(table,body){
@@ -1475,7 +1580,7 @@ async function sbUpsert(table,body){
       body:JSON.stringify(body)
     });
     return r.ok;
-  }catch(e){console.error('sync upsert err:',e);return false;}
+  }catch(e){console.error('upsert err:',e);return false;}
 }
 
 async function sbGet(table,eqCol,eqVal){
@@ -1485,12 +1590,7 @@ async function sbGet(table,eqCol,eqVal){
     });
     if(!r.ok)return null;
     return await r.json();
-  }catch(e){console.error('sync GET err:',e);return null;}
-}
-
-async function ensureUser(){
-  if(!currentUser)return;
-  await sbUpsert('users',{id:currentUser});
+  }catch(e){console.error('GET err:',e);return null;}
 }
 
 async function pushToCloud(){
@@ -1501,9 +1601,7 @@ async function pushToCloud(){
     storageIndicator.textContent='☁️ 已同步';
     storageIndicator.classList.add('file-mode');
     setTimeout(()=>{storageIndicator.textContent='💻 浏览器存储';storageIndicator.classList.remove('file-mode');},2000);
-  }else{
-    storageIndicator.textContent='⚠️ 同步失败';
-  }
+  }else{storageIndicator.textContent='⚠️ 同步失败';}
 }
 
 async function pullFromCloud(){
@@ -1512,6 +1610,11 @@ async function pullFromCloud(){
   if(!rows||rows.length===0)return false;
   const rd=rows[0].data;
   if(!rd)return false;
+  if(rd.todos)for(const t of rd.todos){
+    if(typeof t.label==='string'&&t.label){
+      const lb=labels.find(l=>l.name===t.label);t.label=lb?lb.id:0;
+    }
+  }
   if(rd.todos)todos=rd.todos;
   if(rd.countdowns)countdowns=rd.countdowns;
   if(rd.countups)countups=rd.countups;
@@ -1526,41 +1629,36 @@ async function pullFromCloud(){
 
 function saveTodos(){saveList(SK,todos);}
 
-// Debounced sync
 let _syncTimer=null;
 function syncToCloud(){
   clearTimeout(_syncTimer);
   _syncTimer=setTimeout(pushToCloud,1500);
 }
 
-// Hook renders to trigger sync
+// Hook renders
 const _rt=renderTodo;renderTodo=function(){_rt();syncToCloud();};
 const _rc=renderCd;renderCd=function(){_rc();syncToCloud();};
 const _rcu=renderCu;renderCu=function(){_rcu();syncToCloud();};
 const _rp=renderPie;renderPie=function(){_rp();syncToCloud();};
 
-async function setupUser(){
-  if(currentUser)return;
-  const name=(prompt('👤 请输入你的用户名（用于跨设备同步）：','')||'').trim();
-  if(!name)return;
-  currentUser=name;
-  localStorage.setItem('sync_user',name);
-  await ensureUser();
-  await pushToCloud();
-}
+// Logout button in footer
+const logoutBtn=document.createElement('button');
+logoutBtn.textContent='👤 退出登录';
+logoutBtn.style.cssText='color:#C49090;';
+logoutBtn.addEventListener('click',logout);
+document.querySelector('.file-area').appendChild(logoutBtn);
 
 // =================== 初始化 ===================
 (async function init(){
-  try{
-    await setupUser();
-    if(currentUser){
-      storageIndicator.textContent='☁️ 加载中…';
-      try{await pullFromCloud();}catch(e){console.error(e);}
-      try{await ensureUser();}catch(e){console.error(e);}
-    }
-  }catch(e){console.error('init err:',e);}
+  const loggedIn=await verifySession();
+  if(loggedIn){
+    loginOverlay.style.display='none';
+    storageIndicator.textContent='☁️ 加载中…';
+    try{await pullFromCloud();}catch(e){console.error(e);}
+  }
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-  todoInput.focus();
+  if(loggedIn)syncToCloud();
+  else loginUser.focus();
 })();
 </script>
 </body>
