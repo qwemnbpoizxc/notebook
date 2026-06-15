@@ -283,7 +283,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-17</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-18</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1856,9 +1856,22 @@ let isReadOnly=false;let _hbTimer=null;const _sid=Math.random().toString(36).sli
 
 const _safeSelectors=['#prevDayBtn','#nextDayBtn','#backTodayBtn','#viewDateDisplay','#viewDatePicker','.tp-btn','.filter-btn','#logoutBtn','#loginBtn','#guestBtn','.pie-legend-group','.pie-legend-item'];
 const _safeCss=_safeSelectors.join(',');
+let _roMo=null; // MutationObserver — 只读模式下持续禁用新元素
 
-function _isSafe(el){
-  return _safeSelectors.some(s=>el.matches(s)||el.closest(s));
+function _isSafe(el){return _safeSelectors.some(s=>el.matches(s)||el.closest(s));}
+
+function _roDisableAll(){
+  const safeEls=new Set(document.querySelectorAll(_safeCss));
+  // 禁用表单
+  document.querySelectorAll('.container input,.container select,.container button,.container textarea').forEach(x=>{
+    if(safeEls.has(x)||_isSafe(x))return;
+    x.disabled=true;if(x.tagName==='INPUT'||x.tagName==='TEXTAREA')x.readOnly=true;
+  });
+  // pointer-events 封锁
+  document.querySelectorAll('.container .check-box,.container .delete-btn,.container .timer-btn,.container .timer-input,.container .label-select,.container .existing-label,.container .file-btn,.container .preset-btn,.container .footer button,.container .color-swatch,.container .color-custom-btn,.container .color-pick-trigger')
+  .forEach(x=>{if(!_isSafe(x)&&!safeEls.has(x))x.style.pointerEvents='none';});
+  safeEls.forEach(x=>{if(x)x.style.pointerEvents='auto';});
+  document.querySelectorAll('.tp-btn,.filter-btn').forEach(x=>x.style.pointerEvents='auto');
 }
 
 function _setupReadOnlyUI(){
@@ -1867,18 +1880,11 @@ function _setupReadOnlyUI(){
   d.style.cssText='background:#C49090;color:#FDFBFA;text-align:center;padding:5px 10px;font-size:13px;font-weight:600;';
   d.textContent='🔒 只读模式 — 另一窗口正在操作';
   const c=document.querySelector('.container');if(c)c.insertBefore(d,c.firstChild);
-  // 1) disable form elements
-  const safeEls=new Set(document.querySelectorAll(_safeCss));
-  document.querySelectorAll('.container input,.container select,.container button,.container textarea').forEach(x=>{
-    if(safeEls.has(x))return;
-    x.disabled=true;if(x.tagName==='INPUT'||x.tagName==='TEXTAREA')x.readOnly=true;
-  });
-  // 2) pointer-events:none 挡住所有自定义控件
-  const blockSel='.container .check-box,.container .delete-btn,.container .timer-btn,.container .timer-input,.container .timer-display,.container .label-select,.container .tag,.container .existing-label,.container .todo-item,.container .count-card,.container .file-btn,.container .preset-btn,.container .footer button,.container .color-swatch,.container .color-custom-btn,.container .color-pick-trigger,.container .todo-time,.container .todo-tags,.container .todo-sub,.container .edit-input';
-  document.querySelectorAll(blockSel).forEach(x=>{if(!safeEls.has(x))x.style.pointerEvents='none';});
-  safeEls.forEach(x=>{if(x)x.style.pointerEvents='auto';});
-  document.querySelectorAll('.tp-btn,.filter-btn').forEach(x=>x.style.pointerEvents='auto');
-  // 3) 捕获阶段拦截 click / dblclick / keydown / change / input
+  _roDisableAll();
+  // 持续监控：每次 DOM 变化后重新禁用
+  _roMo=new MutationObserver(()=>_roDisableAll());
+  _roMo.observe(document.querySelector('.container'),{childList:true,subtree:true});
+  // 捕获阶段事件拦截
   document.addEventListener('click',_roEventBlock,true);
   document.addEventListener('dblclick',_roEventBlock,true);
   document.addEventListener('keydown',_roEventBlock,true);
@@ -1889,14 +1895,13 @@ function _setupReadOnlyUI(){
 
 function _roEventBlock(e){
   if(!document.getElementById('roBanner'))return;
-  // Block ALL events except on safe controls
-  const el=e.target;
-  if(_isSafe(el))return;
+  if(_isSafe(e.target))return;
   e.stopImmediatePropagation();e.preventDefault();
 }
 
 function _removeReadOnlyUI(){
   const d=document.getElementById('roBanner');if(d)d.remove();
+  if(_roMo){_roMo.disconnect();_roMo=null;}
   document.querySelectorAll('.container input,.container select,.container button,.container textarea').forEach(x=>{x.disabled=false;x.readOnly=false;});
   document.querySelectorAll('.container *').forEach(x=>{if(x.style.pointerEvents==='none')x.style.pointerEvents='';});
   document.removeEventListener('click',_roEventBlock,true);
@@ -1946,7 +1951,7 @@ function _initSessionCheck(uname){
 })();
 
 // =================== PWA ==================
-if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v17").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
+if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v18").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
 const mb=URL.createObjectURL(new Blob([JSON.stringify({name:'计划清单',short_name:'计划清单',start_url:'/notebook/app.html',scope:'/notebook/',display:'standalone',orientation:'any',background_color:'#8E9AAF',theme_color:'#8E9AAF',icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]})],{type:'application/json'}));const el=document.createElement('link');el.rel='manifest';el.href=mb;document.head.appendChild(el);
 let _dpi=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;const p=document.getElementById('installPrompt');p.style.display='flex';p.onclick=()=>{_dpi.prompt();p.style.display='none';};});window.addEventListener('appinstalled',()=>{document.getElementById('installPrompt').style.display='none';});
 </script>
