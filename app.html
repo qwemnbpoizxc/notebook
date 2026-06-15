@@ -283,7 +283,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-3</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-4</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1597,6 +1597,7 @@ function enterGuest(){logoutBtn.style.display='none';
   storageIndicator.textContent='👤 访客模式（仅本地）';
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
   todoInput.focus();
+  if(!isReadOnly&&currentUser!=="__guest__")_startHeartbeat();
 }
 
 async function doLogin(){
@@ -1627,10 +1628,11 @@ async function doLogin(){
       applyPendingTimer(_tp);
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
       syncToCloud();
+      const _masterOk=await _tryBecomeMaster();
+      if(!_masterOk){isReadOnly=true;_setupReadOnlyUI();showToast("🔒 该账号已在另一窗口登录，本窗口仅可查看");}
+      else{isReadOnly=false;_removeReadOnlyUI();_startHeartbeat();}
+      if(isReadOnly)_checkMasterTimer=setInterval(_checkMasterStatus,20000);
       todoInput.focus();
-    }else{
-      loginErr.textContent='用户名或密码错误';
-    }
   }catch(e){loginErr.textContent='网络错误，请重试';console.error(e);}
   loginBtn.disabled=false;
 }
@@ -1657,6 +1659,8 @@ async function verifySession(){
 }
 
 function logout(){
+  if(_masterHBTimer)clearInterval(_masterHBTimer);if(_checkMasterTimer)clearInterval(_checkMasterTimer);isReadOnly=false;_removeReadOnlyUI();
+  try{sbGet("user_sessions","user_id",currentUser).then(r=>{if(r&&r.length>0) sbUpsert("user_sessions",{user_id:currentUser,session_id:"",last_heartbeat:new Date(0).toISOString()});});}catch(e){}
   currentUser='';sessionToken='';
   localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
   clearAllData();
@@ -1834,6 +1838,86 @@ function applyPendingTimer(pending){
   localStorage.removeItem('_timer_state');
 }
 
+
+// =================== 主操作窗口检测（多设备/多标签） ===================
+let isReadOnly=false;let _masterHBTimer=null;let _checkMasterTimer=null;
+const _mySessionId=Date.now()+'.'+Math.random().toString(36).slice(2);
+
+async function _tryBecomeMaster(){
+  if(!currentUser || currentUser==='__guest__')return true; // 访客不限制
+  try{
+    // Check if another session exists
+    const rows=await sbGet('user_sessions','user_id',currentUser);
+    const now=Date.now();
+    if(rows&&rows.length>0){
+      const last=new Date(rows[0].last_heartbeat).getTime();
+      if(now-last<30000){return false;} // Another session is active
+    }
+    // Become master
+    await sbUpsert('user_sessions',{user_id:currentUser,session_id:_mySessionId,last_heartbeat:new Date().toISOString()});
+    return true;
+  }catch(e){return true;} // On error, assume master
+}
+
+async function _sendHeartbeat(){
+  if(!currentUser||currentUser==='__guest__'||isReadOnly)return;
+  try{await sbUpsert('user_sessions',{user_id:currentUser,session_id:_mySessionId,last_heartbeat:new Date().toISOString()});}catch(e){}
+}
+
+function _startHeartbeat(){
+  if(_masterHBTimer)clearInterval(_masterHBTimer);
+  _sendHeartbeat();
+  _masterHBTimer=setInterval(_sendHeartbeat,15000);
+}
+
+async function _checkMasterStatus(){
+  if(!currentUser||currentUser==='__guest__')return;
+  try{
+    const rows=await sbGet('user_sessions','user_id',currentUser);
+    const now=Date.now();
+    if(rows&&rows.length>0){
+      const last=new Date(rows[0].last_heartbeat).getTime();
+      if(now-last>30000){
+        // Master is gone — try to take over
+        if(confirm('主操作窗口已离线超过30秒，是否接管为主窗口？')){
+          isReadOnly=false;
+          _removeReadOnlyUI();
+          await sbUpsert('user_sessions',{user_id:currentUser,session_id:_mySessionId,last_heartbeat:new Date().toISOString()});
+          _startHeartbeat();
+          showToast('🟢 已接管为主操作窗口');
+        }
+      }else{
+        // Master still alive — stay read-only
+        if(!isReadOnly&&_mySessionId!==rows[0].session_id){
+          isReadOnly=true;
+          _setupReadOnlyUI();
+          showToast('🔒 该账号已在另一窗口登录，本窗口仅可查看');
+        }
+      }
+    }
+  }catch(e){}
+}
+
+function _setupReadOnlyUI(){
+  _removeReadOnlyUI();
+  const d=document.createElement('div');d.id='readOnlyBanner';
+  d.style.cssText='background:#C49090;color:#FDFBFA;text-align:center;padding:4px 8px;font-size:12px;font-weight:600;cursor:pointer;';
+  d.textContent='🔒 只读模式 — 另一窗口正在操作';
+  d.title='点击尝试接管主操作窗口';
+  d.addEventListener('click',()=>_checkMasterStatus());
+  const c=document.querySelector('.container');
+  if(c&&c.firstChild)c.insertBefore(d,c.firstChild);
+  // Lock interactive elements inside container only
+  const container=document.querySelector('.container');
+  if(container)container.querySelectorAll('input:not(#loginUser):not(#loginPass),select,button:not(#loginBtn):not(#guestBtn),.check-box,.delete-btn,.timer-btn,.color-swatch,.color-custom-btn,.color-pick-trigger,.existing-label')
+    .forEach(x=>x.style.pointerEvents='none');
+  if(activeTimer)pauseTimer();
+}
+function _removeReadOnlyUI(){
+  const d=document.getElementById('readOnlyBanner');if(d)d.remove();
+  document.querySelectorAll('[style*="pointer-events: none"]').forEach(x=>x.style.pointerEvents='');
+}
+
 // =================== 初始化 ===================
 (function init(){
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
@@ -1842,7 +1926,7 @@ function applyPendingTimer(pending){
 
 // =================== PWA 安装 ===================
 if('serviceWorker' in navigator){
-  const swURL=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-app-v6").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));
+  const swURL=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-app-v7").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));
   navigator.serviceWorker.register(swURL,{scope:'/notebook/'}).catch(()=>{});
 }
 const manBlob=URL.createObjectURL(new Blob([JSON.stringify({
