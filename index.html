@@ -230,15 +230,20 @@
   .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#2C2927;color:#FDFBFA;padding:10px 24px;border-radius:20px;font-size:16px;z-index:999;animation:toastIn .3s ease,toastOut .3s ease 1.5s forwards;pointer-events:none;}
   @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(-20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
   @keyframes toastOut{from{opacity:1}to{opacity:0}}
-  /* Responsive */
+  /* Responsive: 手机 → 中栏在上, 左栏在中间, 右栏在最下 */
   @media(max-width:900px){
     .main-body{flex-direction:column;}
-    .col-left{flex:0 0 auto;border-right:none;border-bottom:2px solid #EBE8E6;}
-    .col-center{border-right:none;border-bottom:2px solid #EBE8E6;}
-    .col-right{flex:0 0 auto;min-width:0;}
-    .todo-list{max-height:300px;}
-    .count-list{max-height:180px;}
-    .pie-canvas-wrap canvas{width:140px;height:140px;}
+    .col-left{flex:0 0 auto;border-right:none;border-bottom:2px solid #EBE8E6;order:2;}
+    .col-center{flex:1 1 auto;min-width:0;border-right:none;order:1;border-bottom:2px solid #EBE8E6;}
+    .col-right{flex:0 0 auto;min-width:0;order:3;}
+    .todo-list{max-height:320px;}
+    .count-list{max-height:220px;}
+    .pie-canvas-wrap canvas{width:160px;height:160px;}
+  }
+  @media(max-width:500px){
+    body{padding:0;}
+    .container{border-radius:0;max-width:100%;}
+    .header{padding:14px 16px;}
   }
 </style>
 </head>
