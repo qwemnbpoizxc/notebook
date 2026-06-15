@@ -960,20 +960,20 @@ presetFileInput.addEventListener('change',()=>{
       if(!preset.labels||!Array.isArray(preset.labels))throw new Error('格式不正确');
       const total=preset.labels.length;
       if(!confirm(`导入"${preset.name||'未命名'}"预设 (${total}个标签)？\n\n"确定"覆盖当前标签\n"取消"合并`)){
-        // Merge
+        // Merge: remap IDs to avoid conflicts, fix parent refs
+        const idMap={};let nextId=freshLabelId();
         const existingIds=new Set(labels.map(l=>l.id));
-        const newOnes=preset.labels.filter(l=>!existingIds.has(l.id));
-        // Ensure no duplicate names within same parent
-        for(const nl of newOnes){
-          if(labels.find(l=>l.name===nl.name&&l.parent===nl.parent))continue;
-          labels.push(nl);
+        const toAdd=[];
+        for(const pl of preset.labels){
+          if(existingIds.has(pl.id)||labels.find(l=>l.name===pl.name&&l.parent===pl.parent))continue;
+          const oldId=pl.id;const nl={...pl,id:nextId++};idMap[oldId]=nl.id;toAdd.push(nl);
         }
-        showToast(`✅ 已合并 ${labels.length} 个标签`);
+        for(const nl of toAdd){if(nl.parent&&idMap[nl.parent])nl.parent=idMap[nl.parent];}
+        for(const nl of toAdd)labels.push(nl);
+        showToast(`✅ 已合并 ${toAdd.length} 个标签`);
       }else{
+        // Override: keep preset IDs as-is, don't touch ID < 5
         labels=preset.labels.map(l=>({...l}));
-        // Ensure fresh IDs
-        let maxId=Math.max(0,...labels.map(l=>l.id||0))+1;
-        for(const l of labels){if(!l.id||l.id<5)l.id=maxId++;}
         showToast(`✅ 已覆盖导入 ${labels.length} 个标签`);
       }
       saveLabels();renderLabels();renderColorSwatches();renderPie();renderTodo();
