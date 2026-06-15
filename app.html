@@ -283,7 +283,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-14</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-15</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -552,6 +552,17 @@ function addManualTime(id,seconds){
   if(seconds>0)t.timeLogs.push({date:viewDay,seconds});
   saveTodos();renderPie();renderTodo();
 }
+
+// =================== 页面关闭时自动保存计时 ===================
+window.addEventListener('beforeunload',()=>{
+  if(activeTimer){
+    const elapsed=Math.floor((Date.now()-activeTimer.startTime)/1000);
+    if(elapsed>0){
+      localStorage.setItem('_timer_pending',JSON.stringify({todoId:activeTimer.todoId,seconds:elapsed}));
+    }
+  }
+});
+
 
 // =================== 视图日期 ===================
 let viewDate=new Date();viewDate.setHours(0,0,0,0);
@@ -1628,6 +1639,7 @@ async function doLogin(){
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
       syncToCloud();
       todoInput.focus();
+      _initSessionCheck(u);
     }
   }catch(e){loginErr.textContent='网络错误，请重试';console.error(e);}
   loginBtn.disabled=false;
@@ -1655,6 +1667,8 @@ async function verifySession(){
 }
 
 function logout(){
+  _cleanupSession(currentUser);
+  currentUser='';sessionToken='';
   localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
   clearAllData();
   loginUser.value='';loginPass.value='';
@@ -1776,15 +1790,20 @@ document.querySelector('.file-area').appendChild(logoutBtn);
 
 // logout shown after login
 document.getElementById('guestBtn').addEventListener('click',()=>{});
-
-// =================== 页面关闭时暂停计时 & 恢复计时 ===================
-// =================== 页面关闭时 保存 running 部分 到 accumulated ===================
-window.addEventListener('beforeunload',()=>{
-  if(activeTimer)_saveRunningElapsed();
-});
-
 // =================== 读取待注入的计时 ===================
 function extractTimerPending(){
+  // 优先检查页面关闭时保存的计时
+  const pending=localStorage.getItem('_timer_pending');
+  if(pending){
+    try{
+      const p=JSON.parse(pending);
+      if(p.todoId&&p.seconds>0){
+        localStorage.removeItem('_timer_pending');
+        return p;
+      }
+    }catch(e){}
+    localStorage.removeItem('_timer_pending');
+  }
   const data=_readTimerFile();
   if(!data||!data.todoId)return null;
   if(!data.accumulated&&!data.startTime)return null;
@@ -1831,6 +1850,71 @@ function applyPendingTimer(pending){
   localStorage.removeItem('_timer_state');
 }
 
+
+// =================== 同设备多标签保护：心跳锁 ===================
+let isReadOnly=false;let _hbTimer=null;const _sid=Math.random().toString(36).slice(2)+Date.now();
+
+function _setupReadOnlyUI(){
+  const banner=document.getElementById('roBanner');
+  if(banner)return;
+  // 红色横幅
+  const d=document.createElement('div');d.id='roBanner';
+  d.style.cssText='background:#C49090;color:#FDFBFA;text-align:center;padding:5px 10px;font-size:13px;font-weight:600;';
+  d.textContent='🔒 只读模式 — 另一窗口正在操作';
+  const c=document.querySelector('.container');if(c)c.insertBefore(d,c.firstChild);
+  // 安全列表
+  const safe='#prevDayBtn,#nextDayBtn,#backTodayBtn,#viewDateDisplay,#viewDatePicker,.tp-btn,.filter-btn,#logoutBtn,#loginBtn,#guestBtn,.pie-legend-group,.pie-legend-item';
+  const safeEls=new Set(document.querySelectorAll(safe));
+  document.querySelectorAll('.container input,.container select,.container button,.container textarea').forEach(x=>{
+    if(safeEls.has(x)||x.closest('#roBanner'))return;
+    x.disabled=true;if(x.tagName==='INPUT'||x.tagName==='TEXTAREA')x.readOnly=true;
+  });
+  document.querySelectorAll('.container .check-box,.container .delete-btn,.container .timer-btn,.container .color-swatch,.container .color-custom-btn,.container .color-pick-trigger,.container .existing-label,.container .todo-item')
+  .forEach(x=>{if(!safeEls.has(x)&&!x.closest('#roBanner'))x.style.pointerEvents='none';});
+  safeEls.forEach(x=>{if(x){x.style.pointerEvents='auto';}});
+  document.querySelectorAll('.tp-btn,.filter-btn').forEach(x=>{x.style.pointerEvents='auto';});
+  if(activeTimer)pauseTimer();
+}
+
+function _removeReadOnlyUI(){
+  const d=document.getElementById('roBanner');if(d)d.remove();
+  document.querySelectorAll('.container input,.container select,.container button,.container textarea').forEach(x=>{x.disabled=false;x.readOnly=false;});
+  document.querySelectorAll('.container *').forEach(x=>{if(x.style.pointerEvents==='none')x.style.pointerEvents='';});
+}
+
+function _becomeMaster(uname){
+  const key='_master_'+uname;
+  const now=Date.now();
+  const raw=localStorage.getItem(key);
+  if(raw){try{const p=JSON.parse(raw);if(p.sid!==_sid&&now-p.ts<30000)return false;}catch(e){}}
+  localStorage.setItem(key,JSON.stringify({sid:_sid,ts:now}));
+  return true;
+}
+function _startHeartbeat(uname){
+  if(_hbTimer)clearInterval(_hbTimer);
+  const key='_master_'+uname;
+  _hbTimer=setInterval(()=>{
+    const raw=localStorage.getItem(key);
+    try{if(raw&&JSON.parse(raw).sid!==_sid)return;}catch(e){}
+    localStorage.setItem(key,JSON.stringify({sid:_sid,ts:Date.now()}));
+  },5000);
+}
+function _cleanupSession(uname){
+  if(_hbTimer)clearInterval(_hbTimer);_hbTimer=null;
+  localStorage.removeItem('_master_'+uname);
+  _removeReadOnlyUI();isReadOnly=false;
+}
+
+function _initSessionCheck(uname){
+  setTimeout(()=>{
+    if(!_becomeMaster(uname)){
+      isReadOnly=true;_setupReadOnlyUI();
+    }else{
+      isReadOnly=false;_removeReadOnlyUI();_startHeartbeat(uname);
+    }
+  },800);
+}
+
 // =================== 初始化 ===================
 (function init(){
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
@@ -1838,7 +1922,7 @@ function applyPendingTimer(pending){
 })();
 
 // =================== PWA ==================
-if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v14").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
+if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v15").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
 const mb=URL.createObjectURL(new Blob([JSON.stringify({name:'计划清单',short_name:'计划清单',start_url:'/notebook/app.html',scope:'/notebook/',display:'standalone',orientation:'any',background_color:'#8E9AAF',theme_color:'#8E9AAF',icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]})],{type:'application/json'}));const el=document.createElement('link');el.rel='manifest';el.href=mb;document.head.appendChild(el);
 let _dpi=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;const p=document.getElementById('installPrompt');p.style.display='flex';p.onclick=()=>{_dpi.prompt();p.style.display='none';};});window.addEventListener('appinstalled',()=>{document.getElementById('installPrompt').style.display='none';});
 </script>
