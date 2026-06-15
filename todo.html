@@ -1207,11 +1207,17 @@ function deleteTodo(id){
   if(t.type==='once'){todos=todos.filter(x=>x.id!==id);renderTodo();}
   else{
     const vs=getViewStr();
-    if(!confirm(`"${t.text}"\n\n确定要跳过这一天的这个事项吗？\n（任务不会被删除，仅此日不再出现）`))return;
-    if(!t.skipDates)t.skipDates=[];
-    if(!t.skipDates.includes(vs))t.skipDates.push(vs);
-    if(t.doneDate===vs){t.done=false;t.doneDate=null;}
-    renderTodo();showToast(`⏭ 已跳过：${t.text}`);
+    if(confirm(`"${t.text}"\n\n确定要【永久删除】这个周期性事项吗？\n\n注意：这是删除整个任务，所有日期都不会再出现。\n点"取消"则仅跳过当天。`)){
+      // 永久删除
+      todos=todos.filter(x=>x.id!==id);
+      renderTodo();showToast(`🗑 已删除：${t.text}`);
+    }else{
+      // 仅跳过当天
+      if(!t.skipDates)t.skipDates=[];
+      if(!t.skipDates.includes(vs))t.skipDates.push(vs);
+      if(t.doneDate===vs){t.done=false;t.doneDate=null;}
+      renderTodo();showToast(`⏭ 已跳过：${t.text}`);
+    }
   }
 }
 
