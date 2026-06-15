@@ -1716,29 +1716,40 @@ async function pullFromCloud(){
 
 // =================== 页面关闭时暂停计时 & 恢复计时 ===================
 window.addEventListener('beforeunload',()=>{
-  if(activeTimer){const id=activeTimer.todoId;pauseTimer();saveTimerState();}
+  if(activeTimer){
+    const elapsed=Math.floor((Date.now()-activeTimer.startTime)/1000);
+    const t=todos.find(x=>x.id===activeTimer.todoId);
+    if(t&&elapsed>0){
+      if(!t.timeLogs)t.timeLogs=[];
+      const today=realToday();
+      const existing=t.timeLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.seconds,0);
+      t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
+      t.timeLogs.push({date:today,seconds:Math.max(elapsed,existing)});
+      saveTodos();
+      try{const d=JSON.stringify({todos,countdowns,countups,labels});navigator.sendBeacon(SB_URL+'/rest/v1/user_data',new Blob([JSON.stringify({user_id:currentUser,data:JSON.parse(d)})],{type:'application/json'}));}catch(e){}
+    }
+    localStorage.removeItem('_timer_state');
+  }
 });
 
 function restoreTimer(){
   const raw=localStorage.getItem('_timer_state');
   if(!raw)return;
+  localStorage.removeItem('_timer_state');
   try{
-    const s=JSON.parse(raw);
-    const t=todos.find(x=>x.id===s.todoId);
-    if(t){
-      const elapsed=Math.floor((Date.now()-s.startTime)/1000);
-      if(elapsed>5){
-        if(!t.timeLogs)t.timeLogs=[];
-        const today=realToday();let existing=0;
-        for(const l of t.timeLogs){if(l.date===today)existing+=l.seconds;}
-        if(elapsed>existing){
-          t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
-          t.timeLogs.push({date:today,seconds:elapsed});
-        }
-      }
-      saveTodos();renderPie();
+    const s=JSON.parse(raw);if(!s.todoId||!s.startTime)return;
+    const t=todos.find(x=>x.id===s.todoId);if(!t)return;
+    const elapsed=Math.floor((Date.now()-s.startTime)/1000);if(elapsed<5)return;
+    if(!t.timeLogs)t.timeLogs=[];
+    const today=realToday();let existing=0;
+    for(const l of t.timeLogs){if(l.date===today)existing+=l.seconds;}
+    if(elapsed>existing){
+      t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
+      t.timeLogs.push({date:today,seconds:elapsed});
+      saveTodos();
+      if(currentUser&&currentUser!=='__guest__')syncToCloud();
     }
-    localStorage.removeItem('_timer_state');
+    renderPie();
   }catch(e){}
 }
 

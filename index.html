@@ -1732,17 +1732,33 @@ document.getElementById('guestBtn').addEventListener('click',()=>{});
 
 // =================== 页面关闭时暂停计时 & 恢复计时 ===================
 window.addEventListener('beforeunload',()=>{
-  if(activeTimer){const id=activeTimer.todoId;pauseTimer();saveTimerState();}
+  if(activeTimer){
+    // DON'T call pauseTimer (it clears state). Save raw state, then force-sync.
+    const elapsed=Math.floor((Date.now()-activeTimer.startTime)/1000);
+    const t=todos.find(x=>x.id===activeTimer.todoId);
+    if(t&&elapsed>0){
+      if(!t.timeLogs)t.timeLogs=[];
+      const today=realToday();
+      const existing=t.timeLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.seconds,0);
+      t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
+      t.timeLogs.push({date:today,seconds:Math.max(elapsed,existing)});
+      saveTodos();
+      // Fire-and-forget cloud push via sendBeacon
+      const payload=JSON.stringify({todos,countdowns,countups,labels,updatedAt:Date.now()});
+      try{navigator.sendBeacon(SB_URL+'/rest/v1/user_data?user_id=eq.'+encodeURIComponent(currentUser),new Blob([JSON.stringify({user_id:currentUser,data:JSON.parse(payload)})],{type:'application/json'}));}catch(e){}
+    }
+    localStorage.removeItem('_timer_state');
+  }
 });
 
-// Restore timer state on load
-// Restore timer state that was active before page close
+// Restore timer state after cloud data is loaded
 function restoreTimer(){
   const raw=localStorage.getItem('_timer_state');
   if(!raw)return;
   localStorage.removeItem('_timer_state');
   try{
     const s=JSON.parse(raw);
+    if(!s.todoId||!s.startTime)return;
     const t=todos.find(x=>x.id===s.todoId);
     if(!t)return;
     const elapsed=Math.floor((Date.now()-s.startTime)/1000);
@@ -1754,8 +1770,10 @@ function restoreTimer(){
     if(elapsed>existing){
       t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
       t.timeLogs.push({date:today,seconds:elapsed});
-      saveTodos();syncToCloud();
+      saveTodos();
+      if(currentUser&&currentUser!=='__guest__')syncToCloud();
     }
+    renderPie();
   }catch(e){}
 }
 
