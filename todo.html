@@ -374,6 +374,7 @@
       <div class="footer">
         <button id="clearDoneBtn">🗑 清除已完成</button>
         <button id="resetTodayBtn">🔁 重置今日进度</button>
+        <button id="restoreSkippedBtn" style="color:#8B9E82;">🔙 恢复已跳过</button>
         <span style="font-size:13px;color:#C8C5C3;">双击文字可编辑</span>
       </div>
     </div>
@@ -1226,6 +1227,18 @@ function resetToday(){
   renderTodo();
 }
 
+function restoreSkipped(){
+  const vs=getViewStr();
+  const skipped=todos.filter(t=>t.type!=='once'&&t.skipDates&&t.skipDates.includes(vs));
+  if(skipped.length===0){alert('当天没有被跳过的事项');return;}
+  const names=skipped.map(t=>'• '+t.text).join('\n');
+  if(!confirm(`恢复以下 ${skipped.length} 个事项到当天？\n\n${names}\n（取消则不恢复）`))return;
+  for(const t of skipped){
+    t.skipDates=t.skipDates.filter(d=>d!==vs);
+  }
+  renderTodo();showToast('🔙 已恢复 '+skipped.length+' 个事项');
+}
+
 // =================== 编辑 ===================
 let editingId=null;
 todoList.addEventListener('dblclick',e=>{
@@ -1309,6 +1322,7 @@ addBtn.addEventListener('click',addTodo);
 todoInput.addEventListener('keydown',e=>{if(e.key==='Enter')addTodo();});
 clearBtn.addEventListener('click',clearDone);
 resetBtn.addEventListener('click',resetToday);
+document.getElementById('restoreSkippedBtn').addEventListener('click',restoreSkipped);
 
 const prevDayBtn=document.getElementById('prevDayBtn'),nextDayBtn=document.getElementById('nextDayBtn');
 const backTodayBtn=document.getElementById('backTodayBtn'),viewDateDisplay=document.getElementById('viewDateDisplay');
