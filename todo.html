@@ -1551,12 +1551,14 @@ async function setupUser(){
 
 // =================== 初始化 ===================
 (async function init(){
-  await setupUser();
-  if(currentUser){
-    storageIndicator.textContent='☁️ 加载中…';
-    await pullFromCloud();
-    await ensureUser();
-  }
+  try{
+    await setupUser();
+    if(currentUser){
+      storageIndicator.textContent='☁️ 加载中…';
+      try{await pullFromCloud();}catch(e){console.error(e);}
+      try{await ensureUser();}catch(e){console.error(e);}
+    }
+  }catch(e){console.error('init err:',e);}
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
   todoInput.focus();
 })();
