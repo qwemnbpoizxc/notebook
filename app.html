@@ -2,7 +2,12 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#8E9AAF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="计划清单">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%238E9AAF%22 width=%22100%22 height=%22100%22 rx=%2220%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 font-size=%2250%22>📋</text></svg>">
 <title>📋 计划清单</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -288,15 +293,15 @@
   </div>
 </div>
 
-<div class="container">
-  <div class="header">
-    <h1>📋 计划清单</h1>
-    <div class="date-display" id="dateDisplay"></div>
-
 <!-- Install prompt -->
 <div id="installPrompt" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2C2927;color:#FDFBFA;padding:12px 24px;border-radius:30px;font-size:14px;z-index:999;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.3);align-items:center;gap:10px;">
   📱 添加到手机桌面 <span style="margin-left:8px;color:#8E9AAF;font-weight:700;">安装</span>
 </div>
+
+<div class="container">
+  <div class="header">
+    <h1>📋 计划清单</h1>
+    <div class="date-display" id="dateDisplay"></div>
     <div class="stats">
       <div class="stat"><div class="stat-num" id="totalToday">0</div><div class="stat-label">今日事项</div></div>
       <div class="stat"><div class="stat-num" id="doneToday">0</div><div class="stat-label">已完成</div></div>
@@ -1829,15 +1834,102 @@ function applyPendingTimer(pending){
   localStorage.removeItem('_timer_state');
 }
 
+// =================== 多标签页只允许一个操作 ===================
+let isReadOnly=false;
+
+// 本标签页的唯一 ID
+const _tabId=Date.now()+'.'+Math.random().toString(36).slice(2);
+// 谁是 master：存在 localStorage 中
+function _fireRoleChange(){
+  try{localStorage.setItem('_role_beacon',_tabId);}catch(e){}
+}
+
+// 每 3 秒心跳，如果 master 掉线则接班
+let _roleCheckTimer=null;
+function _startRoleCheck(){
+  if(_roleCheckTimer)clearInterval(_roleCheckTimer);
+  // 新标签首轮等一下，如果没人当 master 就自己当
+  const raw=localStorage.getItem('_role_beacon');
+  if(!raw){
+    _fireRoleChange();
+    isReadOnly=false;
+    _updateReadOnlyState();
+  }else{
+    isReadOnly=true;
+    _updateReadOnlyState();
+  }
+  _roleCheckTimer=setInterval(()=>{
+    const last=localStorage.getItem('_role_beacon');
+    if(last===_tabId){
+      // I am master — renew heart
+      _fireRoleChange();
+      if(isReadOnly){
+        isReadOnly=false;
+        _updateReadOnlyState();
+        showToast('🟢 你已成为主操作窗口');
+      }
+    }else{
+      // Someone else is master
+      if(!isReadOnly){
+        isReadOnly=true;
+        _updateReadOnlyState();
+        showToast('🔒 另一个窗口已打开，本窗口进入只读模式');
+      }
+    }
+  },3000);
+}
+
+// Heartbeat also on beforeunload of master
+window.addEventListener('beforeunload',()=>{
+  if(_roleCheckTimer)clearInterval(_roleCheckTimer);
+  if(localStorage.getItem('_role_beacon')===_tabId){
+    localStorage.setItem('_role_beacon','');
+  }
+});
+
+function _updateReadOnlyState(){
+  const el=document.getElementById('readOnlyBanner');
+  if(isReadOnly){
+    if(!el){
+      const d=document.createElement('div');
+      d.id='readOnlyBanner';
+      d.style.cssText='background:#C49090;color:#FDFBFA;text-align:center;padding:6px;font-size:13px;font-weight:600;';
+      d.textContent='🔒 只读模式 — 该窗口不可操作，请切换到主窗口';
+      d.style.cursor='pointer';
+      d.title='点击尝试抢占主操作窗口';
+      d.addEventListener('click',()=>{
+        if(confirm('强制切换为主操作窗口？（其他窗口将变为只读）')){
+          _fireRoleChange();
+          isReadOnly=false;
+          _updateReadOnlyState();
+          showToast('🟢 已切换为主操作窗口');
+        }
+      });
+      const container=document.querySelector('.container');
+      container.insertBefore(d,container.firstChild);
+    }
+    // Lock all interactive elements
+    document.querySelectorAll('input,select,button,.check-box,.delete-btn,.timer-btn,.color-swatch,.color-custom-btn,.color-pick-trigger,.existing-label,.todo-item,.count-card')
+      .forEach(x=>{if(!x.closest('#readOnlyBanner'))x.style.pointerEvents='none';});
+    // Stop any running timer
+    if(activeTimer)pauseTimer();
+  }else{
+    if(el)el.remove();
+    document.querySelectorAll('[style*="pointer-events: none"]')
+      .forEach(x=>x.style.pointerEvents='');
+  }
+}
+
 // =================== 初始化 ===================
 (function init(){
+  _startRoleCheck();
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
   loginUser.focus();
 })();
 
 // =================== PWA 安装 ===================
 if('serviceWorker' in navigator){
-  const swURL=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-app-v4").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));
+  const swURL=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-app-v5").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));
   navigator.serviceWorker.register(swURL,{scope:'/notebook/'}).catch(()=>{});
 }
 const manBlob=URL.createObjectURL(new Blob([JSON.stringify({
