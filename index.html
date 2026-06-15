@@ -278,7 +278,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-2</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-3</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1824,95 +1824,8 @@ function applyPendingTimer(pending){
   localStorage.removeItem('_timer_state');
 }
 
-// =================== 多标签页只允许一个操作 ===================
-let isReadOnly=false;
-
-// 本标签页的唯一 ID
-const _tabId=Date.now()+'.'+Math.random().toString(36).slice(2);
-// 谁是 master：存在 localStorage 中
-function _fireRoleChange(){
-  try{localStorage.setItem('_role_beacon',_tabId);}catch(e){}
-}
-
-// 每 3 秒心跳，如果 master 掉线则接班
-let _roleCheckTimer=null;
-function _startRoleCheck(){
-  if(_roleCheckTimer)clearInterval(_roleCheckTimer);
-  // 新标签首轮等一下，如果没人当 master 就自己当
-  const raw=localStorage.getItem('_role_beacon');
-  if(!raw){
-    _fireRoleChange();
-    isReadOnly=false;
-    _updateReadOnlyState();
-  }else{
-    isReadOnly=true;
-    _updateReadOnlyState();
-  }
-  _roleCheckTimer=setInterval(()=>{
-    const last=localStorage.getItem('_role_beacon');
-    if(last===_tabId){
-      // I am master — renew heart
-      _fireRoleChange();
-      if(isReadOnly){
-        isReadOnly=false;
-        _updateReadOnlyState();
-        showToast('🟢 你已成为主操作窗口');
-      }
-    }else{
-      // Someone else is master
-      if(!isReadOnly){
-        isReadOnly=true;
-        _updateReadOnlyState();
-        showToast('🔒 另一个窗口已打开，本窗口进入只读模式');
-      }
-    }
-  },3000);
-}
-
-// Heartbeat also on beforeunload of master
-window.addEventListener('beforeunload',()=>{
-  if(_roleCheckTimer)clearInterval(_roleCheckTimer);
-  if(localStorage.getItem('_role_beacon')===_tabId){
-    localStorage.setItem('_role_beacon','');
-  }
-});
-
-function _updateReadOnlyState(){
-  const el=document.getElementById('readOnlyBanner');
-  if(isReadOnly){
-    if(!el){
-      const d=document.createElement('div');
-      d.id='readOnlyBanner';
-      d.style.cssText='background:#C49090;color:#FDFBFA;text-align:center;padding:6px;font-size:13px;font-weight:600;';
-      d.textContent='🔒 只读模式 — 该窗口不可操作，请切换到主窗口';
-      d.style.cursor='pointer';
-      d.title='点击尝试抢占主操作窗口';
-      d.addEventListener('click',()=>{
-        if(confirm('强制切换为主操作窗口？（其他窗口将变为只读）')){
-          _fireRoleChange();
-          isReadOnly=false;
-          _updateReadOnlyState();
-          showToast('🟢 已切换为主操作窗口');
-        }
-      });
-      const container=document.querySelector('.container');
-      container.insertBefore(d,container.firstChild);
-    }
-    // Lock all interactive elements
-    document.querySelectorAll('input,select,button,.check-box,.delete-btn,.timer-btn,.color-swatch,.color-custom-btn,.color-pick-trigger,.existing-label,.todo-item,.count-card')
-      .forEach(x=>{if(!x.closest('#readOnlyBanner'))x.style.pointerEvents='none';});
-    // Stop any running timer
-    if(activeTimer)pauseTimer();
-  }else{
-    if(el)el.remove();
-    document.querySelectorAll('[style*="pointer-events: none"]')
-      .forEach(x=>x.style.pointerEvents='');
-  }
-}
-
 // =================== 初始化 ===================
 (function init(){
-  _startRoleCheck();
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
   loginUser.focus();
 })();
