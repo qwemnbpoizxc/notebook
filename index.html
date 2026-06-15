@@ -278,7 +278,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-18</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-1</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -585,12 +585,19 @@ function getWeekStart(d){
 }
 function getMonthStart(){return`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-01`;}
 
+function getWeekEnd(d){
+  const dt=new Date(d);const day=dt.getDay();const end=dt.getDate()+(day===0?0:7-day);
+  return dStr(new Date(dt.setDate(end)));
+}
+function getMonthEnd(){return`${viewDate.getFullYear()}-${String(viewDate.getMonth()+1).padStart(2,'0')}-${new Date(viewDate.getFullYear(),viewDate.getMonth()+1,0).getDate()}`;}
+
 function filterLogsByPeriod(logs){
-  const ref=getViewStr(); // 基于当前查看的日期
+  const ref=getViewStr();
+  const refDate=new Date(viewDate.getTime());
   return logs.filter(l=>{
     if(timePeriod==='today')return l.date===ref;
-    if(timePeriod==='week')return l.date>=getWeekStart(new Date(viewDate.getTime()));
-    if(timePeriod==='month')return l.date>=`${viewDate.getFullYear()}-${String(viewDate.getMonth()+1).padStart(2,'0')}-01`;
+    if(timePeriod==='week'){const ws=getWeekStart(refDate);const we=getWeekEnd(refDate);return l.date>=ws&&l.date<=we;}
+    if(timePeriod==='month'){const ms=`${viewDate.getFullYear()}-${String(viewDate.getMonth()+1).padStart(2,'0')}-01`;const me=getMonthEnd();return l.date>=ms&&l.date<=me;}
     return true;
   });
 }
@@ -613,9 +620,15 @@ function calcLabelTimes(){
       const now=realToday(),ref=getViewStr();
       const sec=Math.floor((Date.now()-activeTimer.startTime)/1000);
       if(timePeriod==='today'&&now===ref)raw[t.label]+=sec;
-      else if(timePeriod==='week'&&now>=getWeekStart(new Date(viewDate.getTime())))raw[t.label]+=sec;
-      else if(timePeriod==='month'&&now>=`${viewDate.getFullYear()}-${String(viewDate.getMonth()+1).padStart(2,'0')}-01`)raw[t.label]+=sec;
-      else if(timePeriod==='all')raw[t.label]+=sec;
+      else if(timePeriod==='week'){
+        const ws=getWeekStart(new Date(viewDate.getTime()));
+        const we=getWeekEnd(new Date(viewDate.getTime()));
+        if(now>=ws&&now<=we)raw[t.label]+=sec;
+      }else if(timePeriod==='month'){
+        const ms=`${viewDate.getFullYear()}-${String(viewDate.getMonth()+1).padStart(2,'0')}-01`;
+        const me=getMonthEnd();
+        if(now>=ms&&now<=me)raw[t.label]+=sec;
+      }else if(timePeriod==='all')raw[t.label]+=sec;
     }
   }
 

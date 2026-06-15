@@ -283,7 +283,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-18</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-1</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -595,12 +595,19 @@ function getWeekStart(d){
 }
 function getMonthStart(){return`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-01`;}
 
+function getWeekEnd(d){
+  const dt=new Date(d);const day=dt.getDay();const end=dt.getDate()+(day===0?0:7-day);
+  return dStr(new Date(dt.setDate(end)));
+}
+function getMonthEnd(){return`${viewDate.getFullYear()}-${String(viewDate.getMonth()+1).padStart(2,'0')}-${new Date(viewDate.getFullYear(),viewDate.getMonth()+1,0).getDate()}`;}
+
 function filterLogsByPeriod(logs){
-  const ref=getViewStr(); // 基于当前查看的日期
+  const ref=getViewStr();
+  const refDate=new Date(viewDate.getTime());
   return logs.filter(l=>{
     if(timePeriod==='today')return l.date===ref;
-    if(timePeriod==='week')return l.date>=getWeekStart(new Date(viewDate.getTime()));
-    if(timePeriod==='month')return l.date>=`${viewDate.getFullYear()}-${String(viewDate.getMonth()+1).padStart(2,'0')}-01`;
+    if(timePeriod==='week'){const ws=getWeekStart(refDate);const we=getWeekEnd(refDate);return l.date>=ws&&l.date<=we;}
+    if(timePeriod==='month'){const ms=`${viewDate.getFullYear()}-${String(viewDate.getMonth()+1).padStart(2,'0')}-01`;const me=getMonthEnd();return l.date>=ms&&l.date<=me;}
     return true;
   });
 }
@@ -623,9 +630,15 @@ function calcLabelTimes(){
       const now=realToday(),ref=getViewStr();
       const sec=Math.floor((Date.now()-activeTimer.startTime)/1000);
       if(timePeriod==='today'&&now===ref)raw[t.label]+=sec;
-      else if(timePeriod==='week'&&now>=getWeekStart(new Date(viewDate.getTime())))raw[t.label]+=sec;
-      else if(timePeriod==='month'&&now>=`${viewDate.getFullYear()}-${String(viewDate.getMonth()+1).padStart(2,'0')}-01`)raw[t.label]+=sec;
-      else if(timePeriod==='all')raw[t.label]+=sec;
+      else if(timePeriod==='week'){
+        const ws=getWeekStart(new Date(viewDate.getTime()));
+        const we=getWeekEnd(new Date(viewDate.getTime()));
+        if(now>=ws&&now<=we)raw[t.label]+=sec;
+      }else if(timePeriod==='month'){
+        const ms=`${viewDate.getFullYear()}-${String(viewDate.getMonth()+1).padStart(2,'0')}-01`;
+        const me=getMonthEnd();
+        if(now>=ms&&now<=me)raw[t.label]+=sec;
+      }else if(timePeriod==='all')raw[t.label]+=sec;
     }
   }
 
@@ -1951,7 +1964,7 @@ function _initSessionCheck(uname){
 })();
 
 // =================== PWA ==================
-if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v18").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
+if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v19").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
 const mb=URL.createObjectURL(new Blob([JSON.stringify({name:'计划清单',short_name:'计划清单',start_url:'/notebook/app.html',scope:'/notebook/',display:'standalone',orientation:'any',background_color:'#8E9AAF',theme_color:'#8E9AAF',icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]})],{type:'application/json'}));const el=document.createElement('link');el.rel='manifest';el.href=mb;document.head.appendChild(el);
 let _dpi=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;const p=document.getElementById('installPrompt');p.style.display='flex';p.onclick=()=>{_dpi.prompt();p.style.display='none';};});window.addEventListener('appinstalled',()=>{document.getElementById('installPrompt').style.display='none';});
 </script>
