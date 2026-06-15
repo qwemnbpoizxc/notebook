@@ -278,7 +278,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-6</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-7</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1587,7 +1587,6 @@ function enterGuest(){logoutBtn.style.display='none';
   storageIndicator.textContent='👤 访客模式（仅本地）';
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
   todoInput.focus();
-  if(currentUser!=="__guest__"){}
 }
 
 async function doLogin(){
@@ -1619,7 +1618,7 @@ async function doLogin(){
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
       syncToCloud();
       todoInput.focus();
-
+    }
   }catch(e){loginErr.textContent='网络错误，请重试';console.error(e);}
   loginBtn.disabled=false;
 }
@@ -1647,7 +1646,6 @@ async function verifySession(){
 
 function logout(){
 
-  try{sbGet("user_sessions","user_id",currentUser).then(r=>{if(r&&r.length>0) sbUpsert("user_sessions",{user_id:currentUser,session_id:"",last_heartbeat:new Date(0).toISOString()});});}catch(e){}
   currentUser='';sessionToken='';
   localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
   clearAllData();
@@ -1824,8 +1822,6 @@ function applyPendingTimer(pending){
   }
   localStorage.removeItem('_timer_state');
 }
-
-
 // =================== 主操作窗口检测（多设备/多标签） ===================
 
 // =================== 初始化 ===================
