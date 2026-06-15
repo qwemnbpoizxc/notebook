@@ -278,7 +278,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-10</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-11</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1833,16 +1833,27 @@ function _setupReadOnlyUI(){
   d.textContent='🔒 只读模式 — 已有另一设备/窗口在操作';
   const c=document.querySelector('.container');if(c)c.insertBefore(d,c.firstChild);
   // Disable ALL interactive elements first
-  const all=document.querySelectorAll('.container input,.container select,.container button,.check-box,.delete-btn,.timer-btn,.color-swatch,.color-custom-btn,.color-pick-trigger');
-  all.forEach(x=>x.style.pointerEvents='none');
+  const all=document.querySelectorAll('.container input,.container select,.container button,.check-box,.delete-btn,.timer-btn,.color-swatch,.color-custom-btn,.color-pick-trigger,.existing-label');
+  all.forEach(x=>{if(!x.closest('#roBanner'))x.style.pointerEvents='none';});
   // Re-enable nav, filters, time period, login/logout
   document.querySelectorAll('#prevDayBtn,#nextDayBtn,#backTodayBtn,#viewDateDisplay,.tp-btn,.filter-btn,#logoutBtn,#loginBtn,#guestBtn')
   .forEach(x=>x.style.pointerEvents='');
+  // Block clicks on interactive elements that fall through pointer-events:none parents
+  window._roBlockClick=function(e){
+    const safe=document.querySelectorAll('#prevDayBtn,#nextDayBtn,#backTodayBtn,#viewDateDisplay,.tp-btn,.filter-btn,#loginBtn,#guestBtn,#logoutBtn');
+    for(const s of safe){if(s.contains(e.target))return true;}
+    return false;
+  };
+  document.addEventListener('click',_roBlock,true);
   if(activeTimer)pauseTimer();
+}
+function _roBlock(e){
+  if(document.getElementById('roBanner')&&!_roBlockClick(e)){e.stopPropagation();e.preventDefault();}
 }
 function _removeReadOnlyUI(){
   const d=document.getElementById('roBanner');if(d)d.remove();
   document.querySelectorAll('[style*="pointer-events: none"]').forEach(x=>x.style.pointerEvents='');
+  document.removeEventListener('click',_roBlock,true);
 }
 
 async function _tryBecomeMaster(){
