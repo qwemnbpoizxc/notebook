@@ -510,10 +510,9 @@ function _applyAccumulated(data){
   if(!t.timeLogs)t.timeLogs=[];
   const today=realToday();
   const existing=t.timeLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.seconds,0);
-  if(data.accumulated>existing){
-    t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
-    t.timeLogs.push({date:today,seconds:data.accumulated});
-  }
+  // 累加，不替换：每次暂停都把当前 session 的时间加到 timeLogs 总和上
+  t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
+  t.timeLogs.push({date:today,seconds:existing+data.accumulated});
   // 写入 timeLogs 后，重置 _timer_state：只保留 todoId，accumulated=0，startTime=null
   localStorage.setItem('_timer_state',JSON.stringify({todoId:data.todoId,accumulated:0,startTime:null}));
 }

@@ -2,12 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#8E9AAF">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="计划清单">
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%238E9AAF%22 width=%22100%22 height=%22100%22 rx=%2220%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 font-size=%2250%22>📋</text></svg>">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>📋 计划清单</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -293,15 +288,15 @@
   </div>
 </div>
 
-<!-- Install prompt -->
-<div id="installPrompt" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2C2927;color:#FDFBFA;padding:12px 24px;border-radius:30px;font-size:14px;z-index:999;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.3);align-items:center;gap:10px;">
-  📱 添加到手机桌面 <span style="margin-left:8px;color:#8E9AAF;font-weight:700;">安装</span>
-</div>
-
 <div class="container">
   <div class="header">
     <h1>📋 计划清单</h1>
     <div class="date-display" id="dateDisplay"></div>
+
+<!-- Install prompt -->
+<div id="installPrompt" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2C2927;color:#FDFBFA;padding:12px 24px;border-radius:30px;font-size:14px;z-index:999;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.3);align-items:center;gap:10px;">
+  📱 添加到手机桌面 <span style="margin-left:8px;color:#8E9AAF;font-weight:700;">安装</span>
+</div>
     <div class="stats">
       <div class="stat"><div class="stat-num" id="totalToday">0</div><div class="stat-label">今日事项</div></div>
       <div class="stat"><div class="stat-num" id="doneToday">0</div><div class="stat-label">已完成</div></div>
@@ -520,10 +515,9 @@ function _applyAccumulated(data){
   if(!t.timeLogs)t.timeLogs=[];
   const today=realToday();
   const existing=t.timeLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.seconds,0);
-  if(data.accumulated>existing){
-    t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
-    t.timeLogs.push({date:today,seconds:data.accumulated});
-  }
+  // 累加，不替换：每次暂停都把当前 session 的时间加到 timeLogs 总和上
+  t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
+  t.timeLogs.push({date:today,seconds:existing+data.accumulated});
   // 写入 timeLogs 后，重置 _timer_state：只保留 todoId，accumulated=0，startTime=null
   localStorage.setItem('_timer_state',JSON.stringify({todoId:data.todoId,accumulated:0,startTime:null}));
 }
@@ -1843,7 +1837,7 @@ function applyPendingTimer(pending){
 
 // =================== PWA 安装 ===================
 if('serviceWorker' in navigator){
-  const swURL=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-app-v3").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));
+  const swURL=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-app-v4").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));
   navigator.serviceWorker.register(swURL,{scope:'/notebook/'}).catch(()=>{});
 }
 const manBlob=URL.createObjectURL(new Blob([JSON.stringify({
