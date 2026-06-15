@@ -236,6 +236,22 @@
   @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(-20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
   @keyframes toastOut{from{opacity:1}to{opacity:0}}
 
+  /* ===== 只读模式视觉效果 ===== */
+  .readonly-mode .check-box,
+  .readonly-mode .delete-btn,
+  .readonly-mode .timer-btn,
+  .readonly-mode .timer-input,
+  .readonly-mode .label-select,
+  .readonly-mode .existing-label,
+  .readonly-mode .todo-item,
+  .readonly-mode .count-card,
+  .readonly-mode .file-btn,
+  .readonly-mode .preset-btn,
+  .readonly-mode .footer button,
+  .readonly-mode .color-swatch,
+  .readonly-mode .color-custom-btn,
+  .readonly-mode .color-pick-trigger{opacity:0.4;filter:grayscale(60%);cursor:not-allowed;}
+
   /* ===== Login Overlay ===== */
   .login-overlay{
     position:fixed;top:0;left:0;width:100%;height:100%;
@@ -276,6 +292,11 @@
     .container{border-radius:0;max-width:100%;}
     .header{padding:14px 16px;}
   }
+
+<!-- Install prompt -->
+<div id="installPrompt" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2C2927;color:#FDFBFA;padding:12px 24px;border-radius:30px;font-size:14px;z-index:999;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.3);align-items:center;gap:10px;">
+  📱 添加到手机桌面 <span style="margin-left:8px;color:#8E9AAF;font-weight:700;">安装</span>
+</div>
 </style>
 </head>
 <body>
@@ -283,7 +304,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-1</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-2</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -291,11 +312,6 @@
     <button id="guestBtn" style="margin-top:6px;background:#EBE8E6;color:#5C5957;border:1.5px solid #D5D2D0;">👤 访客模式（仅本地存储）</button>
     <div class="login-err" id="loginErr"></div>
   </div>
-</div>
-
-<!-- Install prompt -->
-<div id="installPrompt" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2C2927;color:#FDFBFA;padding:12px 24px;border-radius:30px;font-size:14px;z-index:999;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.3);align-items:center;gap:10px;">
-  📱 添加到手机桌面 <span style="margin-left:8px;color:#8E9AAF;font-weight:700;">安装</span>
 </div>
 
 <div class="container">
@@ -1869,18 +1885,16 @@ let isReadOnly=false;let _hbTimer=null;const _sid=Math.random().toString(36).sli
 
 const _safeSelectors=['#prevDayBtn','#nextDayBtn','#backTodayBtn','#viewDateDisplay','#viewDatePicker','.tp-btn','.filter-btn','#logoutBtn','#loginBtn','#guestBtn','.pie-legend-group','.pie-legend-item'];
 const _safeCss=_safeSelectors.join(',');
-let _roMo=null; // MutationObserver — 只读模式下持续禁用新元素
+let _roMo=null;
 
 function _isSafe(el){return _safeSelectors.some(s=>el.matches(s)||el.closest(s));}
 
 function _roDisableAll(){
   const safeEls=new Set(document.querySelectorAll(_safeCss));
-  // 禁用表单
   document.querySelectorAll('.container input,.container select,.container button,.container textarea').forEach(x=>{
     if(safeEls.has(x)||_isSafe(x))return;
     x.disabled=true;if(x.tagName==='INPUT'||x.tagName==='TEXTAREA')x.readOnly=true;
   });
-  // pointer-events 封锁
   document.querySelectorAll('.container .check-box,.container .delete-btn,.container .timer-btn,.container .timer-input,.container .label-select,.container .existing-label,.container .file-btn,.container .preset-btn,.container .footer button,.container .color-swatch,.container .color-custom-btn,.container .color-pick-trigger')
   .forEach(x=>{if(!_isSafe(x)&&!safeEls.has(x))x.style.pointerEvents='none';});
   safeEls.forEach(x=>{if(x)x.style.pointerEvents='auto';});
@@ -1890,14 +1904,22 @@ function _roDisableAll(){
 function _setupReadOnlyUI(){
   if(document.getElementById('roBanner'))return;
   const d=document.createElement('div');d.id='roBanner';
-  d.style.cssText='background:#C49090;color:#FDFBFA;text-align:center;padding:5px 10px;font-size:13px;font-weight:600;';
-  d.textContent='🔒 只读模式 — 另一窗口正在操作';
+  d.style.cssText='background:#C49090;color:#FDFBFA;text-align:center;padding:5px 10px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;';
+  d.innerHTML='<span>🔒 只读模式 — 另一窗口正在操作</span><button id="readonly-force-btn">强制接管</button>';
   const c=document.querySelector('.container');if(c)c.insertBefore(d,c.firstChild);
+  // 强制接管按钮
+  d.querySelector('#readonly-force-btn').addEventListener('click',()=>{
+    if(!confirm('确认强制接管为主操作窗口？\n其他窗口将变为只读模式。'))return;
+    const key='_master_'+currentUser;
+    localStorage.setItem(key,JSON.stringify({sid:_sid,ts:Date.now()}));
+    _removeReadOnlyUI();isReadOnly=false;_startHeartbeat(currentUser);
+    showToast('🟢 已强制接管为主操作窗口');
+  });
+  // 视觉 class
+  document.body.classList.add('readonly-mode');
   _roDisableAll();
-  // 持续监控：每次 DOM 变化后重新禁用
   _roMo=new MutationObserver(()=>_roDisableAll());
   _roMo.observe(document.querySelector('.container'),{childList:true,subtree:true});
-  // 捕获阶段事件拦截
   document.addEventListener('click',_roEventBlock,true);
   document.addEventListener('dblclick',_roEventBlock,true);
   document.addEventListener('keydown',_roEventBlock,true);
@@ -1915,6 +1937,7 @@ function _roEventBlock(e){
 function _removeReadOnlyUI(){
   const d=document.getElementById('roBanner');if(d)d.remove();
   if(_roMo){_roMo.disconnect();_roMo=null;}
+  document.body.classList.remove('readonly-mode');
   document.querySelectorAll('.container input,.container select,.container button,.container textarea').forEach(x=>{x.disabled=false;x.readOnly=false;});
   document.querySelectorAll('.container *').forEach(x=>{if(x.style.pointerEvents==='none')x.style.pointerEvents='';});
   document.removeEventListener('click',_roEventBlock,true);
@@ -1923,6 +1946,21 @@ function _removeReadOnlyUI(){
   document.removeEventListener('change',_roEventBlock,true);
   document.removeEventListener('input',_roEventBlock,true);
 }
+
+// 跨标签页即时通信：storage 事件
+window.addEventListener('storage',e=>{
+  if(!currentUser||currentUser==='__guest__')return;
+  const key='_master_'+currentUser;
+  if(e.key!==key)return;
+  if(!e.newValue){return;} // 清空事件忽略
+  try{
+    const p=JSON.parse(e.newValue);
+    if(p.sid!==_sid){
+      // 另一个标签页抢占了主控权
+      isReadOnly=true;_setupReadOnlyUI();
+    }
+  }catch(e){}
+});
 
 function _becomeMaster(uname){
   const key='_master_'+uname;
@@ -1964,7 +2002,7 @@ function _initSessionCheck(uname){
 })();
 
 // =================== PWA ==================
-if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v19").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
+if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v20").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
 const mb=URL.createObjectURL(new Blob([JSON.stringify({name:'计划清单',short_name:'计划清单',start_url:'/notebook/app.html',scope:'/notebook/',display:'standalone',orientation:'any',background_color:'#8E9AAF',theme_color:'#8E9AAF',icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]})],{type:'application/json'}));const el=document.createElement('link');el.rel='manifest';el.href=mb;document.head.appendChild(el);
 let _dpi=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;const p=document.getElementById('installPrompt');p.style.display='flex';p.onclick=()=>{_dpi.prompt();p.style.display='none';};});window.addEventListener('appinstalled',()=>{document.getElementById('installPrompt').style.display='none';});
 </script>
