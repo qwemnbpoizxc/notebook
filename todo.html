@@ -294,7 +294,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-7</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-8</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -468,19 +468,20 @@ function getLabelColor(id){
   return l.color;
 }
 
-// =================== 计时（_timer_state 仅存 startTime，恢复时算差值，上限 4h） ===================
+// =================== 计时（lastTickTime 防崩溃幽灵时长） ===================
 let activeTimer=null, tickInterval=null;
 
 function startTimer(id){
   if(activeTimer){stopTimer();}
-  activeTimer={todoId:id,startTime:Date.now()};
-  _writeTimerFile();
+  const now=Date.now();
+  activeTimer={todoId:id,startTime:now};
+  _writeTimerFile(now,now);
   if(!tickInterval){tickInterval=setInterval(tick,1000);}
 }
 
-function _writeTimerFile(){
+function _writeTimerFile(start,lastTick){
   if(!activeTimer)return;
-  localStorage.setItem('_timer_state',JSON.stringify({todoId:activeTimer.todoId,startTime:activeTimer.startTime}));
+  localStorage.setItem('_timer_state',JSON.stringify({todoId:activeTimer.todoId,startTime:start||activeTimer.startTime,lastTickTime:lastTick||Date.now()}));
 }
 
 function _readTimerFile(){
@@ -496,9 +497,7 @@ function stopTimer(){
   saveTodos();renderTodo();renderPie();
 }
 
-function pauseTimer(){
-  stopTimer(); // same: sync to logs, clear state
-}
+function pauseTimer(){stopTimer();}
 
 function _syncTimerToLogs(){
   if(!activeTimer)return;
@@ -523,9 +522,9 @@ function tick(){
   const sec=base+running;
   const el=todoList.querySelector(`[data-id="${activeTimer.todoId}"] .timer-display`);
   if(el)el.textContent=fmtDuration(sec);
-  // 每 5 秒刷新 startTime 到 localStorage（防止崩溃丢大量时间）
+  // 每 5s 只更新 lastTickTime（不更新 startTime），崩溃恢复时用 lastTickTime-startTime
   _hbTick=(_hbTick||0)+1;
-  if(_hbTick%5===0){_writeTimerFile();}
+  if(_hbTick%5===0){_writeTimerFile(activeTimer.startTime,Date.now());}
 }
 let _hbTick=0;
 
@@ -540,12 +539,17 @@ function addManualTime(id,seconds){
   saveTodos();renderPie();renderTodo();
 }
 
-// =================== 页面隐藏/关闭时自动保存计时 ===================
+// =================== 页面隐藏/关闭时保存计时 ===================
 window.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='hidden'&&activeTimer){_writeTimerFile();}
+  if(document.visibilityState==='hidden'&&activeTimer){
+    _writeTimerFile(activeTimer.startTime,Date.now());
+  }
 });
 window.addEventListener('beforeunload',()=>{
-  if(activeTimer){_syncTimerToLogs();}
+  if(activeTimer){
+    _syncTimerToLogs();
+    localStorage.removeItem('_timer_state');
+  }
 });
 
 
@@ -1792,8 +1796,9 @@ document.getElementById('guestBtn').addEventListener('click',()=>{});
 function extractTimerPending(){
   const data=_readTimerFile();
   if(!data||!data.todoId||!data.startTime)return null;
-  let elapsed=Math.floor((Date.now()-data.startTime)/1000);
-  if(elapsed>14400)elapsed=14400; // 上限 4h
+  // 用 lastTickTime 算差值（最后存活时间 – 开始时间），而非 now – startTime
+  const endTime=data.lastTickTime||data.startTime;
+  let elapsed=Math.floor((endTime-data.startTime)/1000);
   if(elapsed<3)return null;
   return {todoId:data.todoId,seconds:elapsed};
 }
@@ -1804,15 +1809,16 @@ function applyPendingTimer(pending){
   if(!t){localStorage.removeItem('_timer_state');return;}
   if(!t.timeLogs)t.timeLogs=[];
   const today=realToday();
+  // 直接追加到 timeLogs（overwrite today's total = max of existing and recovered）
   let existing=0;
   for(const l of t.timeLogs){if(l.date===today)existing+=l.seconds;}
-  if(pending.seconds>existing){
-    t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
-    t.timeLogs.push({date:today,seconds:pending.seconds});
-    saveTodos();
-    if(currentUser&&currentUser!=='__guest__'){clearTimeout(_syncTimer);pushToCloud();}
-    renderPie();
-  }
+  // 恢复值加上已有的，如果已有关闭正常保存过，取最大值
+  const final=Math.max(existing, pending.seconds);
+  t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
+  t.timeLogs.push({date:today,seconds:final});
+  saveTodos();
+  if(currentUser&&currentUser!=='__guest__'){clearTimeout(_syncTimer);pushToCloud();}
+  renderPie();
   localStorage.removeItem('_timer_state');
 }
 
