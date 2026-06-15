@@ -1520,7 +1520,7 @@ function enterGuest(){logoutBtn.style.display='none';
   currentUser='__guest__';sessionToken='';
   localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
   loginOverlay.style.display='none';
-      logoutBtn.style.display='';
+
   storageIndicator.textContent='👤 访客模式（仅本地）';
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
   todoInput.focus();
@@ -1660,7 +1660,7 @@ const _rp=renderPie;renderPie=function(){_rp();if(currentUser&&currentUser!=='__
 const logoutBtn=document.createElement('button');
 logoutBtn.textContent='👤 退出登录';
 logoutBtn.id='logoutBtn';
-logoutBtn.style.cssText='color:#C49090;';
+logoutBtn.style.cssText='color:#C49090;display:none;';
 logoutBtn.addEventListener('click',logout);
 document.querySelector('.file-area').appendChild(logoutBtn);
 // logout handled inside doLogin  enterGuest
@@ -1670,35 +1670,8 @@ document.getElementById('guestBtn').addEventListener('click',()=>{});
 
 // =================== 初始化 ===================
 (function init(){
-  // Always show login overlay first, try auto-login in background
-  const token=localStorage.getItem('sync_token');
-  if(token){
-    // Has saved session, try silent login
-    verifySession().then(loggedIn=>{
-      if(loggedIn){
-        loginOverlay.style.display='none';
-      logoutBtn.style.display='';
-        storageIndicator.textContent='☁️ 加载中…';
-        pullFromCloud().then(()=>{
-          renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-          syncToCloud();todoInput.focus();
-        }).catch(()=>{
-          renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-          loginOverlay.style.display='flex';loginUser.focus();
-        });
-      }else{
-        renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-        loginUser.focus();
-      }
-    }).catch(()=>{
-      // Network failed — show login
-      renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-      loginUser.focus();
-    });
-  }else{
-    renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-    loginUser.focus();
-  }
+  renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+  loginUser.focus();
 })();
 </script>
 </body>
