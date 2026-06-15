@@ -283,7 +283,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-16</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-17</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1854,7 +1854,12 @@ function applyPendingTimer(pending){
 // =================== 同设备多标签保护：心跳锁 ===================
 let isReadOnly=false;let _hbTimer=null;const _sid=Math.random().toString(36).slice(2)+Date.now();
 
-const _safeCss='#prevDayBtn,#nextDayBtn,#backTodayBtn,#viewDateDisplay,#viewDatePicker,.tp-btn,.filter-btn,#logoutBtn,#loginBtn,#guestBtn,.pie-legend-group,.pie-legend-item';
+const _safeSelectors=['#prevDayBtn','#nextDayBtn','#backTodayBtn','#viewDateDisplay','#viewDatePicker','.tp-btn','.filter-btn','#logoutBtn','#loginBtn','#guestBtn','.pie-legend-group','.pie-legend-item'];
+const _safeCss=_safeSelectors.join(',');
+
+function _isSafe(el){
+  return _safeSelectors.some(s=>el.matches(s)||el.closest(s));
+}
 
 function _setupReadOnlyUI(){
   if(document.getElementById('roBanner'))return;
@@ -1868,9 +1873,9 @@ function _setupReadOnlyUI(){
     if(safeEls.has(x))return;
     x.disabled=true;if(x.tagName==='INPUT'||x.tagName==='TEXTAREA')x.readOnly=true;
   });
-  // 2) pointer-events:none 挡住自定义控件
-  document.querySelectorAll('.container .check-box,.container .delete-btn,.container .timer-btn,.container .color-swatch,.container .color-custom-btn,.container .color-pick-trigger,.container .existing-label,.container .todo-item,.container .count-card')
-  .forEach(x=>{if(!safeEls.has(x))x.style.pointerEvents='none';});
+  // 2) pointer-events:none 挡住所有自定义控件
+  const blockSel='.container .check-box,.container .delete-btn,.container .timer-btn,.container .timer-input,.container .timer-display,.container .label-select,.container .tag,.container .existing-label,.container .todo-item,.container .count-card,.container .file-btn,.container .preset-btn,.container .footer button,.container .color-swatch,.container .color-custom-btn,.container .color-pick-trigger,.container .todo-time,.container .todo-tags,.container .todo-sub,.container .edit-input';
+  document.querySelectorAll(blockSel).forEach(x=>{if(!safeEls.has(x))x.style.pointerEvents='none';});
   safeEls.forEach(x=>{if(x)x.style.pointerEvents='auto';});
   document.querySelectorAll('.tp-btn,.filter-btn').forEach(x=>x.style.pointerEvents='auto');
   // 3) 捕获阶段拦截 click / dblclick / keydown / change / input
@@ -1884,16 +1889,9 @@ function _setupReadOnlyUI(){
 
 function _roEventBlock(e){
   if(!document.getElementById('roBanner'))return;
-  if(e.type==='keydown'&&e.key==='Enter'){
-    // Enter on disabled/readonly inputs or timer inputs → block
-    const inp=e.target.closest('.timer-input,input[disabled],input[readonly],input:not([id=loginUser]):not([id=loginPass])');
-    if(inp&&!inp.closest(_safeCss)){e.stopImmediatePropagation();e.preventDefault();}
-    return;
-  }
-  // For click/dblclick/change/input: block all targets outside safe zone
-  const el=e.target.closest('.container *');
-  if(!el)return;
-  if(el.closest(_safeCss))return;
+  // Block ALL events except on safe controls
+  const el=e.target;
+  if(_isSafe(el))return;
   e.stopImmediatePropagation();e.preventDefault();
 }
 
@@ -1948,7 +1946,7 @@ function _initSessionCheck(uname){
 })();
 
 // =================== PWA ==================
-if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v16").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
+if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v17").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
 const mb=URL.createObjectURL(new Blob([JSON.stringify({name:'计划清单',short_name:'计划清单',start_url:'/notebook/app.html',scope:'/notebook/',display:'standalone',orientation:'any',background_color:'#8E9AAF',theme_color:'#8E9AAF',icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]})],{type:'application/json'}));const el=document.createElement('link');el.rel='manifest';el.href=mb;document.head.appendChild(el);
 let _dpi=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;const p=document.getElementById('installPrompt');p.style.display='flex';p.onclick=()=>{_dpi.prompt();p.style.display='none';};});window.addEventListener('appinstalled',()=>{document.getElementById('installPrompt').style.display='none';});
 </script>
