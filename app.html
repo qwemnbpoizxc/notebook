@@ -1844,7 +1844,7 @@ function _setupReadOnlyUI(){
   const c=document.querySelector('.container');if(c)c.insertBefore(d,c.firstChild);
 
   // Collect all interactive descendants EXCEPT safe controls
-  const safe='#prevDayBtn,#nextDayBtn,#backTodayBtn,#viewDateDisplay,.tp-btn,.filter-btn,#logoutBtn,#loginBtn,#guestBtn,.pie-legend-group,.pie-legend-item';
+  const safe='#prevDayBtn,#nextDayBtn,#backTodayBtn,#viewDateDisplay,#viewDatePicker,.tp-btn,.filter-btn,#logoutBtn,#loginBtn,#guestBtn,.pie-legend-group,.pie-legend-item';
   const safeEls=new Set(document.querySelectorAll(safe));
 
   // 1) All input / select / button / textarea → disabled (except safe)
