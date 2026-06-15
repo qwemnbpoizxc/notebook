@@ -278,7 +278,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-4</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-5</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1618,11 +1618,8 @@ async function doLogin(){
       applyPendingTimer(_tp);
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
       syncToCloud();
-      const _masterOk=await _tryBecomeMaster();
-      if(!_masterOk){isReadOnly=true;_setupReadOnlyUI();showToast("🔒 该账号已在另一窗口登录，本窗口仅可查看");}
-      else{isReadOnly=false;_removeReadOnlyUI();_startHeartbeat();}
-      if(isReadOnly)_checkMasterTimer=setInterval(_checkMasterStatus,20000);
       todoInput.focus();
+      setTimeout(async()=>{try{const m=await _tryBecomeMaster();if(!m){isReadOnly=true;_setupReadOnlyUI();}else{_startHeartbeat();}}catch(e){}});
   }catch(e){loginErr.textContent='网络错误，请重试';console.error(e);}
   loginBtn.disabled=false;
 }
@@ -1834,19 +1831,17 @@ let isReadOnly=false;let _masterHBTimer=null;let _checkMasterTimer=null;
 const _mySessionId=Date.now()+'.'+Math.random().toString(36).slice(2);
 
 async function _tryBecomeMaster(){
-  if(!currentUser || currentUser==='__guest__')return true; // 访客不限制
+  if(!currentUser || currentUser==='__guest__')return true;
   try{
-    // Check if another session exists
     const rows=await sbGet('user_sessions','user_id',currentUser);
     const now=Date.now();
-    if(rows&&rows.length>0){
+    if(rows&&rows.length>0&&rows[0].last_heartbeat){
       const last=new Date(rows[0].last_heartbeat).getTime();
-      if(now-last<30000){return false;} // Another session is active
+      if(now-last<30000 && rows[0].session_id!==_mySessionId){return false;}
     }
-    // Become master
     await sbUpsert('user_sessions',{user_id:currentUser,session_id:_mySessionId,last_heartbeat:new Date().toISOString()});
     return true;
-  }catch(e){return true;} // On error, assume master
+  }catch(e){console.log('session check err (harmless):',e);return true;}
 }
 
 async function _sendHeartbeat(){
