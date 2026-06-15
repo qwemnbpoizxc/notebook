@@ -283,7 +283,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-7</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-8</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1628,6 +1628,7 @@ async function doLogin(){
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
       syncToCloud();
       todoInput.focus();
+      _initSessionCheck();
     }
   }catch(e){loginErr.textContent='网络错误，请重试';console.error(e);}
   loginBtn.disabled=false;
@@ -1655,7 +1656,7 @@ async function verifySession(){
 }
 
 function logout(){
-
+  _cleanupSession();
   currentUser='';sessionToken='';
   localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
   clearAllData();
@@ -1833,6 +1834,69 @@ function applyPendingTimer(pending){
   localStorage.removeItem('_timer_state');
 }
 // =================== 主操作窗口检测（多设备/多标签） ===================
+let isReadOnly=false;let _hbTimer=null;const _sid=Math.random().toString(36).slice(2)+Date.now();
+
+function _setupReadOnlyUI(){
+  if(document.getElementById('roBanner'))return;
+  const d=document.createElement('div');d.id='roBanner';
+  d.style.cssText='background:#C49090;color:#FDFBFA;text-align:center;padding:5px 10px;font-size:13px;font-weight:600;';
+  d.textContent='🔒 只读模式 — 已有另一设备/窗口在操作';
+  const c=document.querySelector('.container');if(c)c.insertBefore(d,c.firstChild);
+  // Lock interactive elements except login/logout
+  const all=document.querySelectorAll('.container input,.container select,.container button,.check-box,.delete-btn,.timer-btn,.color-swatch,.color-custom-btn,.color-pick-trigger');
+  all.forEach(x=>x.style.pointerEvents='none');
+  if(activeTimer)pauseTimer();
+}
+function _removeReadOnlyUI(){
+  const d=document.getElementById('roBanner');if(d)d.remove();
+  document.querySelectorAll('[style*="pointer-events: none"]').forEach(x=>x.style.pointerEvents='');
+}
+
+async function _tryBecomeMaster(){
+  if(!currentUser||currentUser==='__guest__')return true;
+  const lk='_m_'+currentUser;const now=Date.now();
+  // 1) Same device: check localStorage
+  const ld=localStorage.getItem(lk);
+  if(ld){try{const p=JSON.parse(ld);if(p.sid!==_sid&&now-p.ts<25000)return false;}catch(e){}}
+  // 2) Cross-device: check Supabase (graceful if table missing)
+  try{
+    const rows=await sbGet('user_sessions','user_id',currentUser);
+    if(rows&&rows.length>0&&rows[0].session_id&&rows[0].last_heartbeat&&rows[0].session_id!==_sid){
+      const last=new Date(rows[0].last_heartbeat).getTime();
+      if(now-last<30000)return false;
+    }
+    await sbUpsert('user_sessions',{user_id:currentUser,session_id:_sid,last_heartbeat:new Date().toISOString()});
+  }catch(e){}
+  // 3) Claim local mastership
+  localStorage.setItem(lk,JSON.stringify({sid:_sid,ts:now}));
+  return true;
+}
+
+function _startHeartbeat(){
+  if(_hbTimer)clearInterval(_hbTimer);
+  const lk='_m_'+currentUser;
+  localStorage.setItem(lk,JSON.stringify({sid:_sid,ts:Date.now()}));
+  _hbTimer=setInterval(()=>{
+    localStorage.setItem(lk,JSON.stringify({sid:_sid,ts:Date.now()}));
+    if(currentUser&&currentUser!=='__guest__'){
+      sbUpsert('user_sessions',{user_id:currentUser,session_id:_sid,last_heartbeat:new Date().toISOString()}).catch(()=>{});
+    }
+  },10000);
+}
+
+// Delayed session init (call after render, won't block login)
+function _initSessionCheck(){
+  setTimeout(async()=>{
+    try{const m=await _tryBecomeMaster();if(!m){isReadOnly=true;_setupReadOnlyUI();}else{isReadOnly=false;_removeReadOnlyUI();_startHeartbeat();}}catch(e){}
+  },600);
+}
+
+// Cleanup on logout
+function _cleanupSession(){
+  if(_hbTimer)clearInterval(_hbTimer);_hbTimer=null;
+  isReadOnly=false;_removeReadOnlyUI();
+  const lk='_m_'+currentUser;localStorage.removeItem(lk);
+}
 
 // =================== 初始化 ===================
 (function init(){
