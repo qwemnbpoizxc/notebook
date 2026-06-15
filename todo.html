@@ -1097,7 +1097,7 @@ function renderTodo(){
         const done=isTaskDoneOnDate(t);
         const tags=buildTags(t,done);
         const ed=editingId===t.id?' editing':'';
-        const dT=t.type==='once'?'永久删除':'跳过当天';
+        const dT=t.type==='once'?'永久删除':'单击跳过当天 | 双击永久删除';
         const dI=t.type==='once'?'✕':'⏭';
         const isPlaying=activeTimer&&activeTimer.todoId===t.id;
         const isRealToday=isViewingToday();
@@ -1203,22 +1203,13 @@ function toggleTodo(id){
 }
 
 function deleteTodo(id){
-  const t=todos.find(t=>t.id===id);if(!t)return;
-  if(t.type==='once'){todos=todos.filter(x=>x.id!==id);renderTodo();}
-  else{
-    const vs=getViewStr();
-    if(confirm(`"${t.text}"\n\n确定要【永久删除】这个周期性事项吗？\n\n注意：这是删除整个任务，所有日期都不会再出现。\n点"取消"则仅跳过当天。`)){
-      // 永久删除
-      todos=todos.filter(x=>x.id!==id);
-      renderTodo();showToast(`🗑 已删除：${t.text}`);
-    }else{
-      // 仅跳过当天
-      if(!t.skipDates)t.skipDates=[];
-      if(!t.skipDates.includes(vs))t.skipDates.push(vs);
-      if(t.doneDate===vs){t.done=false;t.doneDate=null;}
-      renderTodo();showToast(`⏭ 已跳过：${t.text}`);
-    }
-  }
+  // Only used for recurring tasks: silently skip current day
+  const t=todos.find(t=>t.id===id);if(!t||t.type==='once')return;
+  const vs=getViewStr();
+  if(!t.skipDates)t.skipDates=[];
+  if(!t.skipDates.includes(vs))t.skipDates.push(vs);
+  if(t.doneDate===vs){t.done=false;t.doneDate=null;}
+  renderTodo();showToast(`⏭ 已跳过：${t.text}`);
 }
 
 function clearDone(){
@@ -1238,6 +1229,19 @@ function resetToday(){
 // =================== 编辑 ===================
 let editingId=null;
 todoList.addEventListener('dblclick',e=>{
+  // Double-click delete button → permanent delete for recurring tasks
+  if(e.target.closest('[data-action="delete"]')){
+    clearTimeout(_delTimeout);_delTimeout=null;
+    const i=e.target.closest('.todo-item');if(!i)return;
+    const t=todos.find(x=>x.id===Number(i.dataset.id));
+    if(t&&t.type!=='once'){
+      if(confirm('永久删除"'+t.text+'"？（此操作不可撤销）')){
+        todos=todos.filter(x=>x.id!==t.id);renderTodo();
+        showToast('🗑 已永久删除：'+t.text);
+      }
+    }
+    return;
+  }
   const i=e.target.closest('.todo-item');if(!i)return;
   editingId=Number(i.dataset.id);renderTodo();
   const inp=todoList.querySelector(`[data-id="${editingId}"] .edit-input`);
@@ -1251,13 +1255,18 @@ todoList.addEventListener('keydown',e=>{
 });
 function saveEdit(id,nt){const tx=nt.trim();if(tx){const t=todos.find(t=>t.id===id);if(t)t.text=tx;}editingId=null;renderTodo();}
 
+let _delTimeout=null;
 todoList.addEventListener('click',e=>{
   if(editingId!==null)return;
   const i=e.target.closest('.todo-item');if(!i)return;
   const id=Number(i.dataset.id);
   const a=e.target.dataset.action||e.target.closest('[data-action]')?.dataset.action;
   if(a==='toggle')toggleTodo(id);
-  else if(a==='delete')deleteTodo(id);
+  else if(a==='delete'){
+    const t=todos.find(x=>x.id===id);if(!t)return;
+    if(t.type==='once'){if(confirm('确定永久删除"'+t.text+'"？')){todos=todos.filter(x=>x.id!==id);renderTodo();}}
+    else{clearTimeout(_delTimeout);_delTimeout=setTimeout(()=>deleteTodo(id),300);}
+  }
   else if(a==='timerToggle'){
     if(activeTimer&&activeTimer.todoId===id){pauseTimer();}
     else{startTimer(id);}
