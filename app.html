@@ -304,7 +304,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-4</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-5</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -478,19 +478,19 @@ function getLabelColor(id){
   return l.color;
 }
 
-// =================== 计时（完全基于 _timer_state，不碰 todos） ===================
+// =================== 计时（_timer_state 心跳 + 阈值保护） ===================
 let activeTimer=null, tickInterval=null;
+let _hbTick=0; // heartbeat counter inside tick
 
 function startTimer(id){
-  // 停止之前的计时，把已过时间存入 _timer_state 闭包
   if(activeTimer){_saveRunningElapsed();}
   activeTimer={todoId:id,startTime:Date.now()};
   _writeTimerFile();
+  _hbTick=0;
   if(!tickInterval){tickInterval=setInterval(tick,1000);}
 }
 
 function _saveRunningElapsed(){
-  // 把当前 activeTimer 的已过秒数写入 _timer_state
   if(!activeTimer)return;
   const elapsed=Math.floor((Date.now()-activeTimer.startTime)/1000);
   if(elapsed<=0)return;
@@ -511,7 +511,7 @@ function _readTimerFile(){
 
 function stopTimer(){
   if(!activeTimer)return;
-  _saveRunningElapsed();  // ← 写入 accumulated 到 _timer_state
+  _saveRunningElapsed();
   const data=_readTimerFile();
   _applyAccumulated(data);
   activeTimer=null;clearInterval(tickInterval);tickInterval=null;
@@ -536,10 +536,8 @@ function _applyAccumulated(data){
   if(!t.timeLogs)t.timeLogs=[];
   const today=realToday();
   const existing=t.timeLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.seconds,0);
-  // 累加，不替换：每次暂停都把当前 session 的时间加到 timeLogs 总和上
   t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
   t.timeLogs.push({date:today,seconds:existing+data.accumulated});
-  // 写入 timeLogs 后，重置 _timer_state：只保留 todoId，accumulated=0，startTime=null
   localStorage.setItem('_timer_state',JSON.stringify({todoId:data.todoId,accumulated:0,startTime:null}));
 }
 
@@ -547,7 +545,6 @@ function tick(){
   if(!activeTimer)return;
   const t=todos.find(x=>x.id===activeTimer.todoId);
   if(!t){stopTimer();return;}
-  // 显示 = timeLogs 今日已有秒数 + 当前 session 的 running 秒数 + _timer_state.accumulated（如果有）
   let base=0;const today=realToday();
   if(t.timeLogs){for(const l of t.timeLogs){if(l.date===today)base+=l.seconds;}}
   const data=_readTimerFile();
@@ -556,6 +553,9 @@ function tick(){
   const sec=base+acc+running;
   const el=todoList.querySelector(`[data-id="${activeTimer.todoId}"] .timer-display`);
   if(el)el.textContent=fmtDuration(sec);
+  // 心跳：每 3 秒刷新 _timer_state 的 accumulated（防止崩溃丢大量时间）
+  _hbTick++;
+  if(_hbTick%3===0){_saveRunningElapsed();_writeTimerFile();}
 }
 
 function addManualTime(id,seconds){
@@ -569,12 +569,24 @@ function addManualTime(id,seconds){
   saveTodos();renderPie();renderTodo();
 }
 
-// =================== 页面关闭时自动保存计时 ===================
+// =================== 页面隐藏/关闭时自动保存计时 ===================
+window.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'&&activeTimer){
+    _saveRunningElapsed();
+    // 兜底：同时写 _timer_pending，restore 时优先读取
+    const data=_readTimerFile();
+    if(data&&data.accumulated){
+      localStorage.setItem('_timer_pending',JSON.stringify({todoId:data.todoId,seconds:data.accumulated}));
+    }
+  }
+});
+// 保留 beforeunload 作为第二道防线
 window.addEventListener('beforeunload',()=>{
   if(activeTimer){
-    const elapsed=Math.floor((Date.now()-activeTimer.startTime)/1000);
-    if(elapsed>0){
-      localStorage.setItem('_timer_pending',JSON.stringify({todoId:activeTimer.todoId,seconds:elapsed}));
+    _saveRunningElapsed();
+    const data=_readTimerFile();
+    if(data&&data.accumulated){
+      localStorage.setItem('_timer_pending',JSON.stringify({todoId:data.todoId,seconds:data.accumulated}));
     }
   }
 });
@@ -1848,9 +1860,10 @@ function extractTimerPending(){
     localStorage.setItem('_timer_state',JSON.stringify(data));
     return r;
   }
-  // 3) 只有 startTime（没来得及写 accumulated）
+  // 3) 只有 startTime（没来得及写 accumulated）— 有 12 小时上限防止幽灵时长
   if(data.startTime){
-    const elapsed=Math.floor((Date.now()-data.startTime)/1000);
+    let elapsed=Math.floor((Date.now()-data.startTime)/1000);
+    if(elapsed>43200)elapsed=43200; // 上限 12h
     if(elapsed<2)return null;
     const acc=data.accumulated||0;
     const total=acc+elapsed;
@@ -1873,7 +1886,7 @@ function applyPendingTimer(pending){
     t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
     t.timeLogs.push({date:today,seconds:pending.seconds});
     saveTodos();
-    if(currentUser&&currentUser!=='__guest__')syncToCloud();
+    if(currentUser&&currentUser!=='__guest__'){clearTimeout(_syncTimer);pushToCloud();}
     renderPie();
   }
   localStorage.removeItem('_timer_state');
@@ -2029,7 +2042,7 @@ function _cleanupSession(uname){
 })();
 
 // =================== PWA ==================
-if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v22").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
+if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v23").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
 const mb=URL.createObjectURL(new Blob([JSON.stringify({name:'计划清单',short_name:'计划清单',start_url:'/notebook/app.html',scope:'/notebook/',display:'standalone',orientation:'any',background_color:'#8E9AAF',theme_color:'#8E9AAF',icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]})],{type:'application/json'}));const el=document.createElement('link');el.rel='manifest';el.href=mb;document.head.appendChild(el);
 let _dpi=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;const p=document.getElementById('installPrompt');p.style.display='flex';p.onclick=()=>{_dpi.prompt();p.style.display='none';};});window.addEventListener('appinstalled',()=>{document.getElementById('installPrompt').style.display='none';});
 </script>
