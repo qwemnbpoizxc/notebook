@@ -294,7 +294,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-2</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-3</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1873,7 +1873,7 @@ function applyPendingTimer(pending){
 // =================== 同设备多标签保护：心跳锁 ===================
 let isReadOnly=false;let _hbTimer=null;const _sid=Math.random().toString(36).slice(2)+Date.now();
 
-const _safeSelectors=['#prevDayBtn','#nextDayBtn','#backTodayBtn','#viewDateDisplay','#viewDatePicker','.tp-btn','.filter-btn','#logoutBtn','#loginBtn','#guestBtn','.pie-legend-group','.pie-legend-item'];
+const _safeSelectors=['#prevDayBtn','#nextDayBtn','#backTodayBtn','#viewDateDisplay','#viewDatePicker','#readonly-force-btn','.tp-btn','.filter-btn','#logoutBtn','#loginBtn','#guestBtn','.pie-legend-group','.pie-legend-item'];
 const _safeCss=_safeSelectors.join(',');
 let _roMo=null;
 
