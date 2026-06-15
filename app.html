@@ -283,7 +283,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-13</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.15-14</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1628,7 +1628,6 @@ async function doLogin(){
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
       syncToCloud();
       todoInput.focus();
-      _initSessionCheck();
     }
   }catch(e){loginErr.textContent='网络错误，请重试';console.error(e);}
   loginBtn.disabled=false;
@@ -1656,8 +1655,6 @@ async function verifySession(){
 }
 
 function logout(){
-  _cleanupSession();
-  currentUser='';sessionToken='';
   localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
   clearAllData();
   loginUser.value='';loginPass.value='';
@@ -1833,94 +1830,6 @@ function applyPendingTimer(pending){
   }
   localStorage.removeItem('_timer_state');
 }
-// =================== 主操作窗口检测（多设备/多标签） ===================
-let isReadOnly=false;let _hbTimer=null;const _sid=Math.random().toString(36).slice(2)+Date.now();
-
-function _setupReadOnlyUI(){
-  if(document.getElementById('roBanner'))return;
-  const d=document.createElement('div');d.id='roBanner';
-  d.style.cssText='background:#C49090;color:#FDFBFA;text-align:center;padding:5px 10px;font-size:13px;font-weight:600;';
-  d.textContent='🔒 只读模式 — 已有另一设备/窗口在操作';
-  const c=document.querySelector('.container');if(c)c.insertBefore(d,c.firstChild);
-
-  // Collect all interactive descendants EXCEPT safe controls
-  const safe='#prevDayBtn,#nextDayBtn,#backTodayBtn,#viewDateDisplay,#viewDatePicker,.tp-btn,.filter-btn,#logoutBtn,#loginBtn,#guestBtn,.pie-legend-group,.pie-legend-item';
-  const safeEls=new Set(document.querySelectorAll(safe));
-
-  // 1) All input / select / button / textarea → disabled (except safe)
-  document.querySelectorAll('.container input,.container select,.container button,.container textarea').forEach(x=>{
-    if(safeEls.has(x))return;
-    x.disabled=true;
-    if(x.tagName==='INPUT'||x.tagName==='TEXTAREA')x.readOnly=true;
-  });
-
-  // 2) Pointer-events none on everything not explicitly safe
-  const allInteractive=document.querySelectorAll('.container *');
-  allInteractive.forEach(x=>{
-    if(safeEls.has(x)){x.style.pointerEvents='auto';return;}
-    const tag=x.tagName;
-    if(tag==='INPUT'||tag==='SELECT'||tag==='BUTTON'||tag==='TEXTAREA'||x.classList.contains('check-box')||x.classList.contains('delete-btn')||x.classList.contains('timer-btn')||x.classList.contains('color-swatch')||x.classList.contains('color-custom-btn')||x.classList.contains('color-pick-trigger')||x.classList.contains('existing-label')||x.classList.contains('todo-item')){
-      x.style.pointerEvents='none';
-    }
-  });
-
-  // 3) Safe controls: explicitly enable pointer events + z-index above main body
-  safeEls.forEach(x=>{if(x){x.style.pointerEvents='auto';x.style.position='relative';x.style.zIndex='60';}});
-  document.querySelectorAll('.tp-btn,.filter-btn').forEach(x=>{x.style.pointerEvents='auto';x.style.position='relative';x.style.zIndex='60';});
-
-  if(activeTimer)pauseTimer();
-}
-function _removeReadOnlyUI(){
-  const d=document.getElementById('roBanner');if(d)d.remove();
-  document.querySelectorAll('.container input,.container select,.container button,.container textarea').forEach(x=>{x.disabled=false;x.readOnly=false;});
-  document.querySelectorAll('.container *').forEach(x=>{if(x.style.pointerEvents==='none')x.style.pointerEvents='';if(x.style.zIndex==='60')x.style.zIndex='';if(x.style.position==='relative')x.style.position='';});
-}
-
-async function _tryBecomeMaster(){
-  if(!currentUser||currentUser==='__guest__')return true;
-  const lk='_m_'+currentUser;const now=Date.now();
-  // 1) Same device: check localStorage
-  const ld=localStorage.getItem(lk);
-  if(ld){try{const p=JSON.parse(ld);if(p.sid!==_sid&&now-p.ts<25000)return false;}catch(e){}}
-  // 2) Cross-device: check Supabase (graceful if table missing)
-  try{
-    const rows=await sbGet('user_sessions','user_id',currentUser);
-    if(rows&&rows.length>0&&rows[0].session_id&&rows[0].last_heartbeat&&rows[0].session_id!==_sid){
-      const last=new Date(rows[0].last_heartbeat).getTime();
-      if(now-last<30000)return false;
-    }
-    await sbUpsert('user_sessions',{user_id:currentUser,session_id:_sid,last_heartbeat:new Date().toISOString()});
-  }catch(e){}
-  // 3) Claim local mastership
-  localStorage.setItem(lk,JSON.stringify({sid:_sid,ts:now}));
-  return true;
-}
-
-function _startHeartbeat(){
-  if(_hbTimer)clearInterval(_hbTimer);
-  const lk='_m_'+currentUser;
-  localStorage.setItem(lk,JSON.stringify({sid:_sid,ts:Date.now()}));
-  _hbTimer=setInterval(()=>{
-    localStorage.setItem(lk,JSON.stringify({sid:_sid,ts:Date.now()}));
-    if(currentUser&&currentUser!=='__guest__'){
-      sbUpsert('user_sessions',{user_id:currentUser,session_id:_sid,last_heartbeat:new Date().toISOString()}).catch(()=>{});
-    }
-  },10000);
-}
-
-// Delayed session init (call after render, won't block login)
-function _initSessionCheck(){
-  setTimeout(async()=>{
-    try{const m=await _tryBecomeMaster();if(!m){isReadOnly=true;_setupReadOnlyUI();}else{isReadOnly=false;_removeReadOnlyUI();_startHeartbeat();}}catch(e){}
-  },600);
-}
-
-// Cleanup on logout
-function _cleanupSession(){
-  if(_hbTimer)clearInterval(_hbTimer);_hbTimer=null;
-  isReadOnly=false;_removeReadOnlyUI();
-  const lk='_m_'+currentUser;localStorage.removeItem(lk);
-}
 
 // =================== 初始化 ===================
 (function init(){
@@ -1929,7 +1838,7 @@ function _cleanupSession(){
 })();
 
 // =================== PWA ==================
-if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v13").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
+if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v14").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
 const mb=URL.createObjectURL(new Blob([JSON.stringify({name:'计划清单',short_name:'计划清单',start_url:'/notebook/app.html',scope:'/notebook/',display:'standalone',orientation:'any',background_color:'#8E9AAF',theme_color:'#8E9AAF',icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]})],{type:'application/json'}));const el=document.createElement('link');el.rel='manifest';el.href=mb;document.head.appendChild(el);
 let _dpi=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;const p=document.getElementById('installPrompt');p.style.display='flex';p.onclick=()=>{_dpi.prompt();p.style.display='none';};});window.addEventListener('appinstalled',()=>{document.getElementById('installPrompt').style.display='none';});
 </script>
