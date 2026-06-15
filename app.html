@@ -1574,7 +1574,9 @@ function enterGuest(){logoutBtn.style.display='none';
   currentUser='__guest__';sessionToken='';
   localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
   loginOverlay.style.display='none';
+  const _tp=extractTimerPending();
   clearAllData();
+  applyPendingTimer(_tp);
   storageIndicator.textContent='👤 访客模式（仅本地）';
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
   todoInput.focus();
@@ -1602,10 +1604,10 @@ async function doLogin(){
       logoutBtn.style.display='';
       logoutBtn.textContent='👤 '+u+'（退出）';
       storageIndicator.textContent='☁️ 加载中…';
+      const _tp=extractTimerPending();
       clearAllData();
       await pullFromCloud();
-      restoreTimer();
-      renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+      applyPendingTimer(_tp);
       syncToCloud();
       todoInput.focus();
     }else{
@@ -1732,25 +1734,34 @@ window.addEventListener('beforeunload',()=>{
   }
 });
 
-function restoreTimer(){
-  const raw=localStorage.getItem('_timer_state');
-  if(!raw)return;
-  localStorage.removeItem('_timer_state');
+function extractTimerPending(){
+  const raw=localStorage.getItem("_timer_state");
+  if(!raw)return null;
+  localStorage.removeItem("_timer_state");
   try{
-    const s=JSON.parse(raw);if(!s.todoId||!s.startTime)return;
-    const t=todos.find(x=>x.id===s.todoId);if(!t)return;
-    const elapsed=Math.floor((Date.now()-s.startTime)/1000);if(elapsed<5)return;
-    if(!t.timeLogs)t.timeLogs=[];
-    const today=realToday();let existing=0;
-    for(const l of t.timeLogs){if(l.date===today)existing+=l.seconds;}
-    if(elapsed>existing){
-      t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
-      t.timeLogs.push({date:today,seconds:elapsed});
-      saveTodos();
-      if(currentUser&&currentUser!=='__guest__')syncToCloud();
-    }
+    const s=JSON.parse(raw);
+    if(!s.todoId||!s.startTime||s.startTime>Date.now())return null;
+    const elapsed=Math.floor((Date.now()-s.startTime)/1000);
+    if(elapsed<5)return null;
+    return {todoId:s.todoId,seconds:elapsed};
+  }catch(e){return null;}
+}
+
+function applyPendingTimer(pending){
+  if(!pending)return;
+  const t=todos.find(x=>x.id===pending.todoId);
+  if(!t)return;
+  if(!t.timeLogs)t.timeLogs=[];
+  const today=realToday();
+  let existing=0;
+  for(const l of t.timeLogs){if(l.date===today)existing+=l.seconds;}
+  if(pending.seconds>existing){
+    t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
+    t.timeLogs.push({date:today,seconds:pending.seconds});
+    saveTodos();
+    if(currentUser&&currentUser!="__guest__")syncToCloud();
     renderPie();
-  }catch(e){}
+  }
 }
 
 function saveTodos(){saveList(SK,todos);}
@@ -1782,7 +1793,7 @@ document.getElementById('guestBtn').addEventListener('click',()=>{});
 // =================== 初始化 ===================
 (function init(){
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-  restoreTimer();
+  const _tp=extractTimerPending();applyPendingTimer(_tp);
   loginUser.focus();
 })();
 
