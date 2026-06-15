@@ -1554,6 +1554,7 @@ async function doLogin(){
       localStorage.setItem('sync_token',h);
       loginOverlay.style.display='none';
       logoutBtn.style.display='';
+      logoutBtn.textContent='👤 '+u+'（退出）';
       storageIndicator.textContent='☁️ 加载中…';
       clearAllData();
       await pullFromCloud();
