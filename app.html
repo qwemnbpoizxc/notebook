@@ -1718,39 +1718,44 @@ async function pullFromCloud(){
 
 // =================== 页面关闭时暂停计时 & 恢复计时 ===================
 window.addEventListener('beforeunload',()=>{
+  // 计时中关闭页面 → 只保存进度到 timeLogs，不删 _timer_state
   if(activeTimer){
-    const elapsed=Math.floor((Date.now()-activeTimer.startTime)/1000);
     const t=todos.find(x=>x.id===activeTimer.todoId);
-    if(t&&elapsed>0){
-      if(!t.timeLogs)t.timeLogs=[];
-      const today=realToday();
-      const existing=t.timeLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.seconds,0);
-      t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
-      t.timeLogs.push({date:today,seconds:Math.max(elapsed,existing)});
-      saveTodos();
-      try{const d=JSON.stringify({todos,countdowns,countups,labels});navigator.sendBeacon(SB_URL+'/rest/v1/user_data',new Blob([JSON.stringify({user_id:currentUser,data:JSON.parse(d)})],{type:'application/json'}));}catch(e){}
+    if(t){
+      const elapsed=Math.floor((Date.now()-activeTimer.startTime)/1000);
+      if(elapsed>0){
+        if(!t.timeLogs)t.timeLogs=[];
+        const today=realToday();
+        const existing=t.timeLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.seconds,0);
+        t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
+        t.timeLogs.push({date:today,seconds:Math.max(elapsed,existing)});
+        saveTodos();
+      }
     }
-    localStorage.removeItem('_timer_state');
+    // 备份文件不要删，reload 后还需用它检验是否存够了
   }
 });
 
+// Extract pending timer state before data gets wiped
 function extractTimerPending(){
-  const raw=localStorage.getItem("_timer_state");
+  const raw=localStorage.getItem('_timer_state');
   if(!raw)return null;
-  localStorage.removeItem("_timer_state");
+  // 不删——applyPendingTimer 成功后再清理
   try{
     const s=JSON.parse(raw);
-    if(!s.todoId||!s.startTime||s.startTime>Date.now())return null;
+    if(!s.todoId||!s.startTime||s.startTime>Date.now()){localStorage.removeItem('_timer_state');return null;}
     const elapsed=Math.floor((Date.now()-s.startTime)/1000);
-    if(elapsed<5)return null;
+    if(elapsed<3)return null;
     return {todoId:s.todoId,seconds:elapsed};
-  }catch(e){return null;}
+  }catch(e){localStorage.removeItem('_timer_state');return null;}
 }
 
+// Apply pending timer to loaded data
 function applyPendingTimer(pending){
   if(!pending)return;
   const t=todos.find(x=>x.id===pending.todoId);
-  if(!t)return;
+  // 即使找不到也清理 _timer_state（计时对应的任务已被删）
+  if(!t){localStorage.removeItem('_timer_state');return;}
   if(!t.timeLogs)t.timeLogs=[];
   const today=realToday();
   let existing=0;
@@ -1759,11 +1764,11 @@ function applyPendingTimer(pending){
     t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
     t.timeLogs.push({date:today,seconds:pending.seconds});
     saveTodos();
-    if(currentUser&&currentUser!="__guest__")syncToCloud();
+    if(currentUser&&currentUser!=='__guest__')syncToCloud();
     renderPie();
   }
+  localStorage.removeItem('_timer_state');
 }
-
 function saveTodos(){saveList(SK,todos);}
 
 let _syncTimer=null;
