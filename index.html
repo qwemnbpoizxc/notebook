@@ -294,7 +294,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-6</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-7</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -468,33 +468,19 @@ function getLabelColor(id){
   return l.color;
 }
 
-// =================== 计时（_timer_state 心跳 + 阈值保护） ===================
+// =================== 计时（_timer_state 仅存 startTime，恢复时算差值，上限 4h） ===================
 let activeTimer=null, tickInterval=null;
-let _hbTick=0; // heartbeat counter inside tick
 
 function startTimer(id){
-  if(activeTimer){_saveRunningElapsed();}
+  if(activeTimer){stopTimer();}
   activeTimer={todoId:id,startTime:Date.now()};
   _writeTimerFile();
-  _hbTick=0;
   if(!tickInterval){tickInterval=setInterval(tick,1000);}
 }
 
-function _saveRunningElapsed(){
-  if(!activeTimer)return;
-  const elapsed=Math.floor((Date.now()-activeTimer.startTime)/1000);
-  if(elapsed<=0)return;
-  const old=_readTimerFile();
-  const previous=old&&old.accumulated?old.accumulated:0;
-  localStorage.setItem('_timer_state',JSON.stringify({todoId:activeTimer.todoId,accumulated:previous+elapsed}));
-  // 重置 startTime 防止 double count
-  activeTimer.startTime=Date.now();
-}
-
 function _writeTimerFile(){
-  const old=_readTimerFile();
-  const acc=old&&old.accumulated?old.accumulated:0;
-  localStorage.setItem('_timer_state',JSON.stringify({todoId:activeTimer.todoId,startTime:activeTimer.startTime,accumulated:acc}));
+  if(!activeTimer)return;
+  localStorage.setItem('_timer_state',JSON.stringify({todoId:activeTimer.todoId,startTime:activeTimer.startTime}));
 }
 
 function _readTimerFile(){
@@ -503,34 +489,28 @@ function _readTimerFile(){
 
 function stopTimer(){
   if(!activeTimer)return;
-  _saveRunningElapsed();
-  const data=_readTimerFile();
-  _applyAccumulated(data);
+  _syncTimerToLogs();
   activeTimer=null;clearInterval(tickInterval);tickInterval=null;
   const btn=todoList.querySelector('.timer-btn.playing');if(btn)btn.classList.remove('playing');
+  localStorage.removeItem('_timer_state');
   saveTodos();renderTodo();renderPie();
 }
 
 function pauseTimer(){
-  if(!activeTimer)return;
-  _saveRunningElapsed();
-  const data=_readTimerFile();
-  _applyAccumulated(data);
-  activeTimer=null;clearInterval(tickInterval);tickInterval=null;
-  const btn=todoList.querySelector('.timer-btn.playing');if(btn)btn.classList.remove('playing');
-  saveTodos();renderPie();renderTodo();
+  stopTimer(); // same: sync to logs, clear state
 }
 
-function _applyAccumulated(data){
-  if(!data||!data.accumulated||data.accumulated<=0)return;
-  const t=todos.find(x=>x.id===data.todoId);
+function _syncTimerToLogs(){
+  if(!activeTimer)return;
+  const elapsed=Math.floor((Date.now()-activeTimer.startTime)/1000);
+  if(elapsed<=0)return;
+  const t=todos.find(x=>x.id===activeTimer.todoId);
   if(!t)return;
   if(!t.timeLogs)t.timeLogs=[];
   const today=realToday();
   const existing=t.timeLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.seconds,0);
   t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
-  t.timeLogs.push({date:today,seconds:existing+data.accumulated});
-  localStorage.setItem('_timer_state',JSON.stringify({todoId:data.todoId,accumulated:0,startTime:null}));
+  t.timeLogs.push({date:today,seconds:existing+elapsed});
 }
 
 function tick(){
@@ -539,16 +519,15 @@ function tick(){
   if(!t){stopTimer();return;}
   let base=0;const today=realToday();
   if(t.timeLogs){for(const l of t.timeLogs){if(l.date===today)base+=l.seconds;}}
-  const data=_readTimerFile();
-  const acc=data&&data.accumulated?data.accumulated:0;
   const running=isViewingToday()?Math.floor((Date.now()-activeTimer.startTime)/1000):0;
-  const sec=base+acc+running;
+  const sec=base+running;
   const el=todoList.querySelector(`[data-id="${activeTimer.todoId}"] .timer-display`);
   if(el)el.textContent=fmtDuration(sec);
-  // 心跳：每 3 秒刷新 _timer_state 的 accumulated（防止崩溃丢大量时间）
-  _hbTick++;
-  if(_hbTick%3===0){_saveRunningElapsed();_writeTimerFile();}
+  // 每 5 秒刷新 startTime 到 localStorage（防止崩溃丢大量时间）
+  _hbTick=(_hbTick||0)+1;
+  if(_hbTick%5===0){_writeTimerFile();}
 }
+let _hbTick=0;
 
 function addManualTime(id,seconds){
   if(seconds<0)return;
@@ -563,24 +542,10 @@ function addManualTime(id,seconds){
 
 // =================== 页面隐藏/关闭时自动保存计时 ===================
 window.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='hidden'&&activeTimer){
-    _saveRunningElapsed();
-    // 兜底：同时写 _timer_pending，restore 时优先读取
-    const data=_readTimerFile();
-    if(data&&data.accumulated){
-      localStorage.setItem('_timer_pending',JSON.stringify({todoId:data.todoId,seconds:data.accumulated}));
-    }
-  }
+  if(document.visibilityState==='hidden'&&activeTimer){_writeTimerFile();}
 });
-// 保留 beforeunload 作为第二道防线
 window.addEventListener('beforeunload',()=>{
-  if(activeTimer){
-    _saveRunningElapsed();
-    const data=_readTimerFile();
-    if(data&&data.accumulated){
-      localStorage.setItem('_timer_pending',JSON.stringify({todoId:data.todoId,seconds:data.accumulated}));
-    }
-  }
+  if(activeTimer){_syncTimerToLogs();}
 });
 
 
@@ -1823,47 +1788,14 @@ document.querySelector('.file-area').appendChild(logoutBtn);
 
 // logout shown after login
 document.getElementById('guestBtn').addEventListener('click',()=>{});
-// =================== 读取待注入的计时 ===================
+// =================== 读取并恢复未正常关闭的计时 ===================
 function extractTimerPending(){
-  // 优先检查页面关闭时保存的计时
-  const pending=localStorage.getItem('_timer_pending');
-  if(pending){
-    try{
-      const p=JSON.parse(pending);
-      if(p.todoId&&p.seconds>0){
-        localStorage.removeItem('_timer_pending');
-        return p;
-      }
-    }catch(e){}
-    localStorage.removeItem('_timer_pending');
-  }
   const data=_readTimerFile();
-  if(!data||!data.todoId)return null;
-  if(!data.accumulated&&!data.startTime)return null;
-  // 1) 如果有 running timer，把当前 elapsed 累加到 accumulated
-  if(activeTimer&&activeTimer.todoId===data.todoId){
-    _saveRunningElapsed();
-    return extractTimerPending();  // 递归一次，此时 accumulated 已包含 running 部分
-  }
-  // 2) 纯粹 accumulated 模式
-  if(data.accumulated){
-    const r={todoId:data.todoId,seconds:data.accumulated};
-    data.accumulated=0;
-    localStorage.setItem('_timer_state',JSON.stringify(data));
-    return r;
-  }
-  // 3) 只有 startTime（没来得及写 accumulated）— 有 12 小时上限防止幽灵时长
-  if(data.startTime){
-    let elapsed=Math.floor((Date.now()-data.startTime)/1000);
-    if(elapsed>43200)elapsed=43200; // 上限 12h
-    if(elapsed<2)return null;
-    const acc=data.accumulated||0;
-    const total=acc+elapsed;
-    data.startTime=null;data.accumulated=0;
-    localStorage.setItem('_timer_state',JSON.stringify(data));
-    return {todoId:data.todoId,seconds:total};
-  }
-  return null;
+  if(!data||!data.todoId||!data.startTime)return null;
+  let elapsed=Math.floor((Date.now()-data.startTime)/1000);
+  if(elapsed>14400)elapsed=14400; // 上限 4h
+  if(elapsed<3)return null;
+  return {todoId:data.todoId,seconds:elapsed};
 }
 
 function applyPendingTimer(pending){
