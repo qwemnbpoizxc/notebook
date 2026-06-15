@@ -1846,7 +1846,7 @@ function _setupReadOnlyUI(){
   const all=document.querySelectorAll('.container input,.container select,.container button,.check-box,.delete-btn,.timer-btn,.color-swatch,.color-custom-btn,.color-pick-trigger');
   all.forEach(x=>x.style.pointerEvents='none');
   // Re-enable nav, filters, time period, export/import, login/logout
-  document.querySelectorAll('#prevDayBtn,#nextDayBtn,#backTodayBtn,#viewDateDisplay,.tp-btn,.filter-btn,#exportBtn,#importBtn,#exportPresetBtn,#importPresetBtn,#logoutBtn,#loginBtn,#guestBtn')
+  document.querySelectorAll('#prevDayBtn,#nextDayBtn,#backTodayBtn,#viewDateDisplay,.tp-btn,.filter-btn,#logoutBtn,#loginBtn,#guestBtn')
   .forEach(x=>x.style.pointerEvents='');
   if(activeTimer)pauseTimer();
 }
