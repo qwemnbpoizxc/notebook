@@ -8,12 +8,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="计划清单">
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%238E9AAF%22 width=%22100%22 height=%22100%22 rx=%2220%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 font-size=%2250%22>📋</text></svg>">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#8E9AAF">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="计划清单">
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%238E9AAF%22 width=%22100%22 height=%22100%22 rx=%2220%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 font-size=%2250%22>📋</text></svg>">
 <title>📋 计划清单</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -300,9 +294,7 @@
 </div>
 
 <!-- Install prompt -->
-<div id="installPrompt" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2C2927;color:#FDFBFA;padding:12px 24px;border-radius:30px;font-size:14px;z-index:999;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.3);align-items:center;gap:10px;">
-  📱 添加到手机桌面 <span style="margin-left:8px;color:#8E9AAF;font-weight:700;">安装</span>
-</div>
+<div id="installPrompt" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2C2927;color:#FDFBFA;padding:12px 24px;border-radius:30px;font-size:14px;z-index:999;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.3);align-items:center;gap:10px;">📱 添加到手机桌面 <span style="margin-left:8px;color:#8E9AAF;font-weight:700;">安装</span></div>
 
 <div class="container">
   <div class="header">
@@ -468,59 +460,82 @@ function getLabelColor(id){
   return l.color;
 }
 
-// =================== 计时状态 ===================
-let activeTimer=null; // {todoId, startTime}
-let tickInterval=null;
-
-function saveTimerState(){
-  if(activeTimer)localStorage.setItem('_timer_state',JSON.stringify(activeTimer));
-  else localStorage.removeItem('_timer_state');
-}
+// =================== 计时（完全基于 _timer_state，不碰 todos） ===================
+let activeTimer=null, tickInterval=null;
 
 function startTimer(id){
-  if(activeTimer){stopTimer();}
+  // 停止之前的计时，把已过时间存入 _timer_state 闭包
+  if(activeTimer){_saveRunningElapsed();}
   activeTimer={todoId:id,startTime:Date.now()};
-  saveTimerState();
+  _writeTimerFile();
   if(!tickInterval){tickInterval=setInterval(tick,1000);}
 }
+
+function _saveRunningElapsed(){
+  // 把当前 activeTimer 的已过秒数写入 _timer_state
+  if(!activeTimer)return;
+  const elapsed=Math.floor((Date.now()-activeTimer.startTime)/1000);
+  if(elapsed<=0)return;
+  const old=_readTimerFile();
+  const previous=old&&old.accumulated?old.accumulated:0;
+  localStorage.setItem('_timer_state',JSON.stringify({todoId:activeTimer.todoId,accumulated:previous+elapsed}));
+}
+
+function _writeTimerFile(){
+  const old=_readTimerFile();
+  const acc=old&&old.accumulated?old.accumulated:0;
+  localStorage.setItem('_timer_state',JSON.stringify({todoId:activeTimer.todoId,startTime:activeTimer.startTime,accumulated:acc}));
+}
+
+function _readTimerFile(){
+  try{const r=localStorage.getItem('_timer_state');return r?JSON.parse(r):null;}catch(e){return null;}
+}
+
 function stopTimer(){
   if(!activeTimer)return;
-  const elapsed=Math.floor((Date.now()-activeTimer.startTime)/1000);
-  if(elapsed>0){
-    const t=todos.find(x=>x.id===activeTimer.todoId);
-    if(t){
-      if(!t.timeLogs)t.timeLogs=[];
-      t.timeLogs.push({date:realToday(),seconds:elapsed});
-    }
-  }
-  const btn=todoList.querySelector(`[data-id="${activeTimer.todoId}"] .timer-btn`);
-  if(btn)btn.classList.remove('playing');
+  _saveRunningElapsed();  // ← 写入 accumulated 到 _timer_state
+  const data=_readTimerFile();
+  _applyAccumulated(data);
   activeTimer=null;clearInterval(tickInterval);tickInterval=null;
-  saveTimerState();saveTodos();renderTodo();renderPie();
+  const btn=todoList.querySelector('.timer-btn.playing');if(btn)btn.classList.remove('playing');
+  saveTodos();renderTodo();renderPie();
 }
+
 function pauseTimer(){
   if(!activeTimer)return;
-  const id=activeTimer.todoId;
-  const elapsed=Math.floor((Date.now()-activeTimer.startTime)/1000);
-  if(elapsed>0){
-    const t=todos.find(x=>x.id===id);
-    if(t){
-      if(!t.timeLogs)t.timeLogs=[];
-      t.timeLogs.push({date:realToday(),seconds:elapsed});
-    }
-  }
-  const btn=todoList.querySelector(`[data-id="${id}"] .timer-btn`);
-  if(btn)btn.classList.remove('playing');
+  _saveRunningElapsed();
+  const data=_readTimerFile();
+  _applyAccumulated(data);
   activeTimer=null;clearInterval(tickInterval);tickInterval=null;
-  saveTimerState();saveTodos();renderPie();renderTodo();
+  const btn=todoList.querySelector('.timer-btn.playing');if(btn)btn.classList.remove('playing');
+  saveTodos();renderPie();renderTodo();
 }
+
+function _applyAccumulated(data){
+  // 把 _timer_state 中的 accumulated 写入 timeLogs（永久保存）
+  if(!data||!data.accumulated||data.accumulated<=0)return;
+  const t=todos.find(x=>x.id===data.todoId);
+  if(!t)return;
+  if(!t.timeLogs)t.timeLogs=[];
+  const today=realToday();
+  const existing=t.timeLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.seconds,0);
+  if(data.accumulated>existing){
+    t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
+    t.timeLogs.push({date:today,seconds:data.accumulated});
+  }
+  // 重置 _timer_state 的 accumulated 为 0
+  data.accumulated=0;
+  if(activeTimer)data.startTime=Date.now();
+  localStorage.setItem('_timer_state',JSON.stringify(data));
+}
+
 function tick(){
   if(!activeTimer)return;
   const t=todos.find(x=>x.id===activeTimer.todoId);
   if(!t){stopTimer();return;}
-  let viewTotal=0;const viewDay=getViewStr();
-  if(t.timeLogs){for(const l of t.timeLogs){if(l.date===viewDay)viewTotal+=l.seconds;}}
-  const sec=viewTotal+(isViewingToday()?Math.floor((Date.now()-activeTimer.startTime)/1000):0);
+  const data=_readTimerFile();
+  const acc=data&&data.accumulated?data.accumulated:0;
+  const sec=acc+(isViewingToday()?Math.floor((Date.now()-activeTimer.startTime)/1000):0);
   const el=todoList.querySelector(`[data-id="${activeTimer.todoId}"] .timer-display`);
   if(el)el.textContent=fmtDuration(sec);
 }
@@ -1608,6 +1623,7 @@ async function doLogin(){
       clearAllData();
       await pullFromCloud();
       applyPendingTimer(_tp);
+      renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
       syncToCloud();
       todoInput.focus();
     }else{
@@ -1671,7 +1687,25 @@ async function sbGet(table,eqCol,eqVal){
 
 async function pushToCloud(){
   if(!currentUser||currentUser==='__guest__')return;
-  const payload={todos,countdowns,countups,labels,updatedAt:Date.now()};
+  // Pull current cloud state, merge timeLogs (keep larger), then push
+  const cloudRows=await sbGet('user_data','user_id',currentUser);
+  let mergedTds=todos;
+  if(cloudRows&&cloudRows.length>0&&cloudRows[0].data&&cloudRows[0].data.todos){
+    const ctodo=cloudRows[0].data.todos;
+    const cmap={};for(const ct of ctodo)cmap[ct.id]=ct;
+    mergedTds=todos.map(t=>{
+      if(cmap[t.id]){
+        const ct=cmap[t.id];
+        const cTotal=(ct.timeLogs||[]).reduce((s,l)=>s+l.seconds,0);
+        const lTotal=(t.timeLogs||[]).reduce((s,l)=>s+l.seconds,0);
+        if(cTotal>lTotal){t.timeLogs=ct.timeLogs;t.done=ct.done;t.doneDate=ct.doneDate;t.skipDates=ct.skipDates;}
+        delete cmap[t.id];
+      }
+      return t;
+    });
+    for(const[,ct]of Object.entries(cmap))mergedTds.push(ct);
+  }
+  const payload={todos:mergedTds,countdowns,countups,labels,updatedAt:Date.now()};
   const ok=await sbUpsert('user_data',{user_id:currentUser,data:payload});
   if(ok){
     storageIndicator.textContent='☁️ 已同步';
@@ -1691,6 +1725,7 @@ async function pullFromCloud(){
       const lb=labels.find(l=>l.name===t.label);t.label=lb?lb.id:0;
     }
   }
+  // Merge cloud data with local: for timeLogs, take the one with more total seconds
   if(rd.todos){
     const cmap={};for(const t of rd.todos)cmap[t.id]=t;
     for(const t of todos){
@@ -1698,11 +1733,12 @@ async function pullFromCloud(){
         const ct=cmap[t.id];
         const cTotal=(ct.timeLogs||[]).reduce((s,l)=>s+l.seconds,0);
         const lTotal=(t.timeLogs||[]).reduce((s,l)=>s+l.seconds,0);
-        if(lTotal>cTotal)t.timeLogs=t.timeLogs;
+        if(lTotal>cTotal)t.timeLogs=t.timeLogs;// keep local (more complete)
         else{t.timeLogs=ct.timeLogs;t.done=ct.done;t.doneDate=ct.doneDate;t.skipDates=ct.skipDates;}
         delete cmap[t.id];
       }
     }
+    // Add cloud-only todos
     for(const[_,ct]of Object.entries(cmap))todos.push(ct);
   }
   if(rd.countdowns)countdowns=rd.countdowns;
@@ -1716,59 +1752,6 @@ async function pullFromCloud(){
   return true;
 }
 
-// =================== 页面关闭时暂停计时 & 恢复计时 ===================
-window.addEventListener('beforeunload',()=>{
-  // 计时中关闭页面 → 只保存进度到 timeLogs，不删 _timer_state
-  if(activeTimer){
-    const t=todos.find(x=>x.id===activeTimer.todoId);
-    if(t){
-      const elapsed=Math.floor((Date.now()-activeTimer.startTime)/1000);
-      if(elapsed>0){
-        if(!t.timeLogs)t.timeLogs=[];
-        const today=realToday();
-        const existing=t.timeLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.seconds,0);
-        t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
-        t.timeLogs.push({date:today,seconds:Math.max(elapsed,existing)});
-        saveTodos();
-      }
-    }
-    // 备份文件不要删，reload 后还需用它检验是否存够了
-  }
-});
-
-// Extract pending timer state before data gets wiped
-function extractTimerPending(){
-  const raw=localStorage.getItem('_timer_state');
-  if(!raw)return null;
-  // 不删——applyPendingTimer 成功后再清理
-  try{
-    const s=JSON.parse(raw);
-    if(!s.todoId||!s.startTime||s.startTime>Date.now()){localStorage.removeItem('_timer_state');return null;}
-    const elapsed=Math.floor((Date.now()-s.startTime)/1000);
-    if(elapsed<3)return null;
-    return {todoId:s.todoId,seconds:elapsed};
-  }catch(e){localStorage.removeItem('_timer_state');return null;}
-}
-
-// Apply pending timer to loaded data
-function applyPendingTimer(pending){
-  if(!pending)return;
-  const t=todos.find(x=>x.id===pending.todoId);
-  // 即使找不到也清理 _timer_state（计时对应的任务已被删）
-  if(!t){localStorage.removeItem('_timer_state');return;}
-  if(!t.timeLogs)t.timeLogs=[];
-  const today=realToday();
-  let existing=0;
-  for(const l of t.timeLogs){if(l.date===today)existing+=l.seconds;}
-  if(pending.seconds>existing){
-    t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
-    t.timeLogs.push({date:today,seconds:pending.seconds});
-    saveTodos();
-    if(currentUser&&currentUser!=='__guest__')syncToCloud();
-    renderPie();
-  }
-  localStorage.removeItem('_timer_state');
-}
 function saveTodos(){saveList(SK,todos);}
 
 let _syncTimer=null;
@@ -1795,19 +1778,71 @@ document.querySelector('.file-area').appendChild(logoutBtn);
 // logout shown after login
 document.getElementById('guestBtn').addEventListener('click',()=>{});
 
+// =================== 页面关闭时暂停计时 & 恢复计时 ===================
+// =================== 页面关闭时 保存 running 部分 到 accumulated ===================
+window.addEventListener('beforeunload',()=>{
+  if(activeTimer)_saveRunningElapsed();
+});
+
+// =================== 读取待注入的计时 ===================
+function extractTimerPending(){
+  const data=_readTimerFile();
+  if(!data||!data.todoId)return null;
+  if(!data.accumulated&&!data.startTime)return null;
+  // 1) 如果有 running timer，把当前 elapsed 累加到 accumulated
+  if(activeTimer&&activeTimer.todoId===data.todoId){
+    _saveRunningElapsed();
+    return extractTimerPending();  // 递归一次，此时 accumulated 已包含 running 部分
+  }
+  // 2) 纯粹 accumulated 模式
+  if(data.accumulated){
+    const r={todoId:data.todoId,seconds:data.accumulated};
+    data.accumulated=0;
+    localStorage.setItem('_timer_state',JSON.stringify(data));
+    return r;
+  }
+  // 3) 只有 startTime（没来得及写 accumulated）
+  if(data.startTime){
+    const elapsed=Math.floor((Date.now()-data.startTime)/1000);
+    if(elapsed<2)return null;
+    const acc=data.accumulated||0;
+    const total=acc+elapsed;
+    data.startTime=null;data.accumulated=0;
+    localStorage.setItem('_timer_state',JSON.stringify(data));
+    return {todoId:data.todoId,seconds:total};
+  }
+  return null;
+}
+
+function applyPendingTimer(pending){
+  if(!pending||pending.seconds<=0)return;
+  const t=todos.find(x=>x.id===pending.todoId);
+  if(!t){localStorage.removeItem('_timer_state');return;}
+  if(!t.timeLogs)t.timeLogs=[];
+  const today=realToday();
+  let existing=0;
+  for(const l of t.timeLogs){if(l.date===today)existing+=l.seconds;}
+  if(pending.seconds>existing){
+    t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
+    t.timeLogs.push({date:today,seconds:pending.seconds});
+    saveTodos();
+    if(currentUser&&currentUser!=='__guest__')syncToCloud();
+    renderPie();
+  }
+  localStorage.removeItem('_timer_state');
+}
+
 // =================== 初始化 ===================
 (function init(){
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-  // Timer restored in login/guest flows
   loginUser.focus();
 })();
 
 // =================== PWA 安装 ===================
 if('serviceWorker' in navigator){
-  const swURL=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-app-v1").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));
+  const swURL=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-app-v2").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));
   navigator.serviceWorker.register(swURL,{scope:'/notebook/'}).catch(()=>{});
 }
-
 const manBlob=URL.createObjectURL(new Blob([JSON.stringify({
   name:'计划清单',short_name:'计划清单',
   start_url:'/notebook/app.html',scope:'/notebook/',
@@ -1816,7 +1851,6 @@ const manBlob=URL.createObjectURL(new Blob([JSON.stringify({
   icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]
 })],{type:'application/json'}));
 const ml=document.createElement('link');ml.rel='manifest';ml.href=manBlob;document.head.appendChild(ml);
-
 let _dpi=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;
   const p=document.getElementById('installPrompt');p.style.display='flex';
