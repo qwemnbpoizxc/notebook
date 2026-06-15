@@ -960,19 +960,21 @@ presetFileInput.addEventListener('change',()=>{
       if(!preset.labels||!Array.isArray(preset.labels))throw new Error('格式不正确');
       const total=preset.labels.length;
       if(!confirm(`导入"${preset.name||'未命名'}"预设 (${total}个标签)？\n\n"确定"覆盖当前标签\n"取消"合并`)){
-        // Merge: remap IDs to avoid conflicts, fix parent refs
+        // Merge: build complete ID map, then add only missing labels
         const idMap={};let nextId=freshLabelId();
-        const existingIds=new Set(labels.map(l=>l.id));
-        const toAdd=[];
         for(const pl of preset.labels){
-          if(existingIds.has(pl.id)||labels.find(l=>l.name===pl.name&&l.parent===pl.parent))continue;
-          const oldId=pl.id;const nl={...pl,id:nextId++};idMap[oldId]=nl.id;toAdd.push(nl);
+          const exist=labels.find(l=>l.name===pl.name&&l.parent===pl.parent);
+          if(exist){idMap[pl.id]=exist.id;}// existing label, use its ID
+          else{const nid=nextId++;idMap[pl.id]=nid;}// new label, assign fresh ID
         }
-        for(const nl of toAdd){if(nl.parent&&idMap[nl.parent])nl.parent=idMap[nl.parent];}
-        for(const nl of toAdd)labels.push(nl);
-        showToast(`✅ 已合并 ${toAdd.length} 个标签`);
+        for(const pl of preset.labels){
+          const exist=labels.find(l=>l.name===pl.name&&l.parent===pl.parent);
+          if(exist)continue;// already exists, skip
+          const nl={...pl,id:idMap[pl.id],parent:pl.parent?idMap[pl.parent]:null};
+          labels.push(nl);
+        }
+        showToast(`✅ 已合并 ${Object.keys(idMap).length} 个标签`);
       }else{
-        // Override: keep preset IDs as-is, don't touch ID < 5
         labels=preset.labels.map(l=>({...l}));
         showToast(`✅ 已覆盖导入 ${labels.length} 个标签`);
       }
