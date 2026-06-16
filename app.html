@@ -254,13 +254,15 @@
 
   /* ===== Login Overlay ===== */
   .login-overlay{
-    position:fixed;top:0;left:0;width:100%;height:100%;
+    position:fixed;top:0;left:0;width:100%;height:100vh;overflow-y:auto;
     background:linear-gradient(135deg,#8E9AAF,#8E7B8C);
     display:flex;align-items:center;justify-content:center;z-index:1000;
+    padding:16px;
   }
   .login-card{
-    background:#FDFBFA;border-radius:16px;padding:36px 32px;
+    background:#FDFBFA;border-radius:16px;padding:28px 24px;
     width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.2);text-align:center;
+    margin:auto;
   }
   .login-card h2{font-size:22px;color:#2C2927;margin-bottom:6px;}
   .login-card .login-sub{font-size:13px;color:#908D8B;margin-bottom:20px;}
