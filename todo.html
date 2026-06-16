@@ -294,7 +294,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-13</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-14</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1970,7 +1970,33 @@ function _cleanupSession(uname){
 // =================== 初始化 ===================
 (function init(){
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-  loginUser.focus();
+  // 自动登录：检查是否有有效 session
+  const savedUser=localStorage.getItem('sync_user');
+  const savedToken=localStorage.getItem('sync_token');
+  if(savedUser&&savedToken){
+    verifySession().then(loggedIn=>{
+      if(loggedIn){
+        // 自动恢复登录
+        loginOverlay.style.display='none';
+        logoutBtn.style.display='';
+        logoutBtn.textContent='👤 '+savedUser+'（退出）';
+        storageIndicator.textContent='☁️ 加载中…';
+        const _tp=extractTimerPending();
+        clearAllData();
+        pullFromCloud().then(()=>{
+          applyPendingTimer(_tp);
+          renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+          syncToCloud();
+          todoInput.focus();
+          _initSessionCheck(savedUser);
+        });
+      }else{
+        loginUser.focus();
+      }
+    });
+  }else{
+    loginUser.focus();
+  }
 })();
 </script>
 </body>
