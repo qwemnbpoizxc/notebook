@@ -172,14 +172,14 @@
   .count-card.soon .days-num{color:#C4A882;}.count-card.normal .days-num{color:#8B9E82;}
   .countup-card .days-num{color:#C49E9E;}
   /* Pie chart area (left column) */
-  .pie-area{flex:1;display:flex;flex-direction:column;overflow-y:auto;}
-  .pie-canvas-wrap{text-align:center;padding:12px 0 6px;flex-shrink:0;}
+  .pie-area{flex:1;display:flex;flex-direction:row;overflow-y:auto;align-items:flex-start;gap:4px;}
+  .pie-canvas-wrap{text-align:center;padding:6px 0 4px;flex-shrink:0;}
   .pie-canvas-wrap canvas{cursor:default;}
   .time-period-switch{display:flex;gap:3px;justify-content:center;padding:5px 10px;flex-shrink:0;}
   .tp-btn{padding:3px 10px;border:1.5px solid #D5D2D0;background:#FDFBFA;border-radius:12px;font-size:13px;cursor:pointer;color:#908D8B;transition:all .2s;}
   .tp-btn:hover{border-color:#8E9AAF;color:#8E9AAF;}
   .tp-btn.active{background:#8E9AAF;color:#FDFBFA;border-color:#8E9AAF;}
-  .pie-legend{padding:5px 14px 10px;flex-shrink:0;}
+  .pie-legend{padding:4px 8px 8px;flex:1;min-width:0;overflow-y:auto;max-height:260px;}
   .pie-legend-item{display:flex;align-items:center;flex-wrap:wrap;gap:5px;font-size:13px;color:#5C5957;padding:3px 0;}
   .pie-legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
   .pie-legend-name{flex:1;}
@@ -299,7 +299,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.17-3</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.17-4</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -307,11 +307,6 @@
     <button id="guestBtn" style="margin-top:6px;background:#EBE8E6;color:#5C5957;border:1.5px solid #D5D2D0;">👤 访客模式（仅本地存储）</button>
     <div class="login-err" id="loginErr"></div>
   </div>
-</div>
-
-<!-- Install prompt -->
-<div id="installPrompt" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2C2927;color:#FDFBFA;padding:12px 24px;border-radius:30px;font-size:14px;z-index:999;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.3);align-items:center;gap:10px;">
-  📱 添加到手机桌面 <span style="margin-left:8px;color:#8E9AAF;font-weight:700;">安装</span>
 </div>
 
 <div class="container">
@@ -2037,12 +2032,6 @@ function _cleanupSession(uname){
     loginUser.focus();
   }
 })();
-
-// =================== PWA ==================
-if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v32").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
-const mb=URL.createObjectURL(new Blob([JSON.stringify({name:'计划清单',short_name:'计划清单',start_url:'/notebook/app.html',scope:'/notebook/',display:'standalone',orientation:'any',background_color:'#8E9AAF',theme_color:'#8E9AAF',icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]})],{type:'application/json'}));const el=document.createElement('link');el.rel='manifest';el.href=mb;document.head.appendChild(el);
-let _dpi=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;const p=document.getElementById('installPrompt');p.style.display='flex';p.onclick=()=>{_dpi.prompt();p.style.display='none';};});window.addEventListener('appinstalled',()=>{document.getElementById('installPrompt').style.display='none';});
 </script>
 </body>
-</html>
 </html>
