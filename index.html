@@ -294,7 +294,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-20</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-21</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1927,25 +1927,28 @@ async function _becomeMaster(uname){
 function _startHeartbeat(uname){
   if(_hbTimer)clearInterval(_hbTimer);
   const key='_master_'+uname;
+  let lastSelfWrite=0;
   _hbTimer=setInterval(async()=>{
-    // 先检查云端是否被其他设备接管
+    const now=Date.now();
+    // 先写自己的本地心跳
+    localStorage.setItem(key,JSON.stringify({sid:_sid,ts:now}));
+    // 检查 Supabase 是否被其他设备占领
     if(currentUser&&currentUser!=='__guest__'){
       try{
         const rows=await sbGet('user_sessions','user_id',currentUser);
         if(rows&&rows.length>0&&rows[0].session_id&&rows[0].session_id!==_sid&&rows[0].last_heartbeat){
-          const last=new Date(rows[0].last_heartbeat).getTime();
-          if(Date.now()-last<15000){
-            // 云端 session 被其他设备占有且活跃 → 本设备降级
+          const remoteTs=new Date(rows[0].last_heartbeat).getTime();
+          // 只有对方比我们最近一次写的还新，才认
+          if(remoteTs>lastSelfWrite&&now-remoteTs<15000){
             isReadOnly=true;_setupReadOnlyUI();_startAutoTakeoverCheck(uname);return;
           }
         }
       }catch(e){}
     }
-    // 本地仍然主控，写心跳
-    const data={sid:_sid,ts:Date.now()};
-    localStorage.setItem(key,JSON.stringify(data));
+    // 自己是主控，写 Supabase
     if(currentUser&&currentUser!=='__guest__'){
       sbUpsert('user_sessions',{user_id:currentUser,session_id:_sid,last_heartbeat:new Date().toISOString()}).catch(()=>{});
+      lastSelfWrite=now;
     }
   },5000);
 }
