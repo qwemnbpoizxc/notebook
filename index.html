@@ -1914,14 +1914,14 @@ async function _becomeMaster(uname){
   if(raw){try{const p=JSON.parse(raw);if(p.sid!==_sid&&now-p.ts<10000)return false;}catch(e){}}
   // 2) Check Supabase (cross-device)
   try{
-    const rows=await sbGet('user_sessions','user_id',currentUser);
+    const rows=await sbGet('user_sessions','user_id',uname);
     if(rows&&rows.length>0&&rows[0].session_id&&rows[0].session_id!==_sid&&rows[0].last_heartbeat){
       const last=new Date(rows[0].last_heartbeat).getTime();
       if(now-last<12000)return false;
     }
   }catch(e){}
   localStorage.setItem(key,JSON.stringify({sid:_sid,ts:now}));
-  await sbUpsert('user_sessions',{user_id:currentUser,session_id:_sid,last_heartbeat:new Date().toISOString()}).catch(()=>{});
+  await sbUpsert('user_sessions',{user_id:uname,session_id:_sid,last_heartbeat:new Date().toISOString()}).catch(()=>{});
   return true;
 }
 function _startHeartbeat(uname){
