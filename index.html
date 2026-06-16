@@ -297,7 +297,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.17-13</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.17-14</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -705,27 +705,38 @@ function renderPie(){
   ctx.fillStyle='#2C2927';ctx.font='bold 13px sans-serif';ctx.textAlign='center';
   ctx.fillText(fmtDuration(total),cx,cy+4);
 
-  // Draw label names
+  // Draw label names (staggered to avoid overlap)
+  const placedLabels=[];
   for(const s of slices){
     const mid=(s.startAngle+s.endAngle)/2;
     const pct=s.data.total/total;
     const name=s.name;
     ctx.save();
-    // Try inside first if slice > 15%
     if(pct>0.15&&name.length<=4){
       const ir=router-(router-rinner)*0.5;
       const tx=cx+Math.cos(mid)*ir,ty=cy+Math.sin(mid)*ir;
       ctx.fillStyle='#fff';ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
       ctx.fillText(name,tx,ty);
     }else{
-      // Outside with line
-      const or=router+12;
-      const tx=cx+Math.cos(mid)*or,ty=cy+Math.sin(mid)*or;
-      const isLeft=tx<cx;
+      // Staggered outside labels
+      const isLeft=Math.cos(mid)<0;
+      let bestR=router+12;const step=14;
+      for(let attempt=0;attempt<6;attempt++){
+        const testR=router+12+attempt*step;
+        const tx=cx+Math.cos(mid)*testR,ty=cy+Math.sin(mid)*testR;
+        const sw=ctx.measureText(name).width;
+        let overlaps=false;
+        for(const pl of placedLabels){
+          if(Math.abs(tx-pl.tx)<pl.hw/2+sw/2+6&&Math.abs(ty-pl.ty)<14){overlaps=true;break;}
+        }
+        if(!overlaps||attempt===5){bestR=testR;break;}
+      }
+      const tx=cx+Math.cos(mid)*bestR,ty=cy+Math.sin(mid)*bestR;
       ctx.fillStyle='#2C2927';ctx.font='11px sans-serif';
       ctx.textAlign=isLeft?'right':'left';ctx.textBaseline='middle';
       ctx.fillText(name,tx,ty);
-      // Short connector line
+      placedLabels.push({tx,ty,hw:ctx.measureText(name).width});
+      // Connector line
       const lx1=cx+Math.cos(mid)*router,ly1=cy+Math.sin(mid)*router;
       const lx2=cx+Math.cos(mid)*(router+4),ly2=cy+Math.sin(mid)*(router+4);
       ctx.beginPath();ctx.moveTo(lx1,ly1);ctx.lineTo(lx2,ly2);ctx.lineTo(tx,ty);
