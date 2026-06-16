@@ -294,7 +294,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-27</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-28</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1066,7 +1066,8 @@ function isTaskForDate(t){
 function isTaskDoneOnDate(t){
   const vStr=getViewStr();
   if(t.type==='once')return t.done;
-  return t.done&&t.doneDate===vStr;
+  // 周期性任务：检查 doneDates 数组
+  return t.doneDates&&t.doneDates.includes(vStr);
 }
 function getViewDateTasks(){
   const tasks=[];
@@ -1074,7 +1075,7 @@ function getViewDateTasks(){
     if(!isTaskForDate(t))continue;
     tasks.push(t);
   }
-  tasks.sort((a,b)=>{if(a.done!==b.done)return a.done?1:-1;const o={daily:0,weekly:1,once:2};return(o[a.type]||0)-(o[b.type]||0);});
+  tasks.sort((a,b)=>{const ad=isTaskDoneOnDate(a),bd=isTaskDoneOnDate(b);if(ad!==bd)return ad?1:-1;const o={daily:0,weekly:1,once:2};return(o[a.type]||0)-(o[b.type]||0);});
   return tasks;
 }
 
@@ -1221,6 +1222,20 @@ function migrateOldLabels(){
 
 migrateOldLabels();
 
+// Migrate periodic tasks from done/doneDate to doneDates[]
+(function(){
+  let changed=false;
+  for(const t of todos){
+    if(t.type!=='once'&&t.doneDates===undefined){
+      t.doneDates=[];
+      if(t.done&&t.doneDate)t.doneDates.push(t.doneDate);
+      t.done=false;t.doneDate=null;
+      changed=true;
+    }
+  }
+  if(changed)saveTodos();
+})();
+
 function buildTags(t,done){
   let g='';
   if(t.type==='once'&&t.date)g+=`<span class="tag date-tag">${fmtDate(t.date)}</span>`;
@@ -1234,7 +1249,7 @@ function buildTags(t,done){
 function addTodo(){
   const tx=todoInput.value.trim();if(!tx){todoInput.focus();return;}
   if(currentTaskType==='weekly'&&pickedWeekDays.size===0){alert('请至少选择一个重复的星期');return;}
-  const nt={id:Date.now(),text:tx,type:currentTaskType,done:false,doneDate:null,createdDate:realToday(),label:'',timeLogs:[]};
+  const nt={id:Date.now(),text:tx,type:currentTaskType,done:false,doneDate:null,doneDates:[],createdDate:realToday(),label:'',timeLogs:[]};
   if(currentTaskType==='once')nt.date=getViewStr();
   else if(currentTaskType==='weekly')nt.weekDays=[...pickedWeekDays];
   todos.unshift(nt);
@@ -1245,17 +1260,23 @@ function addTodo(){
 function toggleTodo(id){
   const t=todos.find(t=>t.id===id);if(!t)return;
   if(t.type==='once'){t.done=!t.done;if(t.done)t.doneDate=getViewStr();else t.doneDate=null;}
-  else{if(isTaskDoneOnDate(t)){t.done=false;t.doneDate=null;}else{t.done=true;t.doneDate=getViewStr();}}
+  else{
+    if(!t.doneDates)t.doneDates=[];
+    const vs=getViewStr();
+    const idx=t.doneDates.indexOf(vs);
+    if(idx>=0)t.doneDates.splice(idx,1);
+    else t.doneDates.push(vs);
+  }
   renderTodo();
 }
 
 function deleteTodo(id){
-  // Only used for recurring tasks: silently skip current day
   const t=todos.find(t=>t.id===id);if(!t||t.type==='once')return;
   const vs=getViewStr();
   if(!t.skipDates)t.skipDates=[];
   if(!t.skipDates.includes(vs))t.skipDates.push(vs);
-  if(t.doneDate===vs){t.done=false;t.doneDate=null;}
+  // 同时清除当天完成状态
+  if(t.doneDates){const idx=t.doneDates.indexOf(vs);if(idx>=0)t.doneDates.splice(idx,1);}
   renderTodo();showToast(`⏭ 已跳过：${t.text}`);
 }
 
@@ -1263,13 +1284,13 @@ function clearDone(){
   if(!todos.some(t=>t.type==='once'&&t.done)&&!todos.some(t=>t.type!=='once'&&isTaskDoneOnDate(t))){alert('没有已完成的事项可以清除');return;}
   if(!confirm('确定清除已完成事项？\n\n• 一次性：永久删除\n• 每日/每周：仅清除今天完成状态'))return;
   todos=todos.filter(t=>!(t.type==='once'&&t.done));
-  for(const t of todos){if(t.type!=='once'&&t.done&&t.doneDate===getViewStr()){t.done=false;t.doneDate=null;}}
+  for(const t of todos){if(t.type!=='once'&&t.doneDates){const vs=getViewStr();const idx=t.doneDates.indexOf(vs);if(idx>=0)t.doneDates.splice(idx,1);}}
   renderTodo();
 }
 
 function resetToday(){
   if(!confirm('确定重置今天所有完成状态吗？（任务不会被删除）'))return;
-  for(const t of todos){if(t.done&&t.doneDate===getViewStr()){t.done=false;t.doneDate=null;}}
+  for(const t of todos){if(t.type==='once'&&t.done&&t.doneDate===getViewStr()){t.done=false;t.doneDate=null;}if(t.type!=='once'&&t.doneDates){const vs=getViewStr();const idx=t.doneDates.indexOf(vs);if(idx>=0)t.doneDates.splice(idx,1);}}
   renderTodo();
 }
 
@@ -1709,7 +1730,7 @@ async function pushToCloud(){
         const ct=cmap[t.id];
         const cEdit=ct._lastEdit||0;
         const lEdit=t._lastEdit||0;
-        if(cEdit>lEdit){t.timeLogs=ct.timeLogs;t._lastEdit=cEdit;t.done=ct.done;t.doneDate=ct.doneDate;t.skipDates=ct.skipDates;}
+        if(cEdit>lEdit){t.timeLogs=ct.timeLogs;t._lastEdit=cEdit;t.done=ct.done;t.doneDate=ct.doneDate;t.doneDates=ct.doneDates;t.skipDates=ct.skipDates;}
         delete cmap[t.id];
       }
       return t;
@@ -1747,7 +1768,7 @@ async function pullFromCloud(){
         const ct=cmap[t.id];
         const cEdit=ct._lastEdit||0;
         const lEdit=t._lastEdit||0;
-        if(cEdit>lEdit){t.timeLogs=ct.timeLogs;t._lastEdit=cEdit;t.done=ct.done;t.doneDate=ct.doneDate;t.skipDates=ct.skipDates;}
+        if(cEdit>lEdit){t.timeLogs=ct.timeLogs;t._lastEdit=cEdit;t.done=ct.done;t.doneDate=ct.doneDate;t.doneDates=ct.doneDates;t.skipDates=ct.skipDates;}
         delete cmap[t.id];
       }
     }
