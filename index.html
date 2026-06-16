@@ -294,7 +294,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-25</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-26</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1618,14 +1618,16 @@ async function doLogin(){
   if(!u||!p){loginErr.textContent='请输入用户名和密码';return;}
   loginBtn.disabled=true;loginErr.textContent='验证中…';
   const h=await sha256(p);
-  // Verify via direct table query (RPC may not exist)
   try{
-    const r=await fetch(SB_URL+'/rest/v1/user_accounts?username=eq.'+encodeURIComponent(u)+'&password_hash=eq.'+h+'&select=username',{
-      headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}
+    const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),10000);
+    const r=await fetch(SB_URL+'/rest/v1/rpc/check_login',{
+      method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({p_user:u,p_hash:h}),signal:ctrl.signal
     });
+    clearTimeout(to);
     if(!r.ok){loginErr.textContent='服务器错误，请重试';loginBtn.disabled=false;return;}
-    const rows=await r.json();
-    if(rows&&rows.length>0){
+    const ok=await r.json();
+    if(ok===true||(Array.isArray(ok)&&ok.length>0&&ok[0])){
       currentUser=u;
       sessionToken=h;
       localStorage.setItem('sync_user',u);
@@ -1653,12 +1655,15 @@ async function verifySession(){
   const t=localStorage.getItem('sync_token');
   if(!u||!t)return false;
   try{
-    const r=await fetch(SB_URL+'/rest/v1/user_accounts?username=eq.'+encodeURIComponent(u)+'&password_hash=eq.'+t+'&select=username',{
-      headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}
+    const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),8000);
+    const r=await fetch(SB_URL+'/rest/v1/rpc/check_login',{
+      method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({p_user:u,p_hash:t}),signal:ctrl.signal
     });
+    clearTimeout(to);
     if(!r.ok)return false;
-    const rows=await r.json();
-    if(rows&&rows.length>0){currentUser=u;sessionToken=t;return true;}
+    const ok=await r.json();
+    if(ok===true||(Array.isArray(ok)&&ok.length>0&&ok[0])){currentUser=u;sessionToken=t;return true;}
   }catch(e){}
   // Network error — don't clear session, just let them in (offline-tolerant)
   currentUser=u;sessionToken=t;return true;
