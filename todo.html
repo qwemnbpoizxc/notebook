@@ -294,7 +294,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-10</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-11</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -530,11 +530,11 @@ function tick(){
 let _hbTick=0;
 
 function addManualTime(id,seconds){
-  if(seconds<0)return;
+  if(seconds<0||isNaN(seconds))return;
   const t=todos.find(x=>x.id===id);if(!t)return;
   if(!t.timeLogs)t.timeLogs=[];
-  // 为当前查看的日期设定时长
   const viewDay=getViewStr();
+  // 删除当天旧数据，如果传入 0 就清空，否则写入新值
   t.timeLogs=t.timeLogs.filter(l=>l.date!==viewDay);
   if(seconds>0)t.timeLogs.push({date:viewDay,seconds});
   saveTodos();renderPie();renderTodo();
@@ -547,10 +547,8 @@ window.addEventListener('visibilitychange',()=>{
   }
 });
 window.addEventListener('beforeunload',()=>{
-  if(activeTimer){
-    _syncTimerToLogs();
-    localStorage.removeItem('_timer_state');
-  }
+  // 只更新 lastTickTime，不删 _timer_state，不写 timeLogs（会被 clearAllData 清掉）
+  if(activeTimer){_writeTimerFile(activeTimer.startTime,Date.now());}
 });
 
 
