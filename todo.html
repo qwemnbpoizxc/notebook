@@ -294,7 +294,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-28</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-29</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -687,7 +687,7 @@ function renderPie(){
   for(let i=0;i<entries.length;i++){
     const [id,data]=entries[i];
     const slice=Math.max(data.total/total*Math.PI*2,0.04);
-    const color=COLORS10[i%COLORS10.length];
+    const color=data.color||COLORS10[i%COLORS10.length];
     ctx.beginPath();ctx.moveTo(cx,cy);
     ctx.arc(cx,cy,router,angle,angle+slice);
     ctx.closePath();
@@ -732,11 +732,11 @@ function renderPie(){
   }
 
   // Legend
-  let lh='',colorIdx2=0;
+  let lh='';
   for(let i=0;i<entries.length;i++){
     const[id,data]=entries[i];
     const subEntries=Object.entries(data.subs).filter(([,v])=>v.sec>0);
-    const color=COLORS10[colorIdx2%COLORS10.length];
+    const color=data.color||COLORS10[i%COLORS10.length];
     if(subEntries.length>0){
       const subHtml=subEntries.map(([sid,sv])=>`<div class="pie-sub-item">↳ ${escHtml(sv.name)} <span class="pie-sub-time">${fmtDuration(sv.sec)}</span></div>`).join('');
       lh+=`<div class="pie-legend-item pie-legend-group">

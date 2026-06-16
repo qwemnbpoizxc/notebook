@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#8E9AAF">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -254,15 +254,13 @@
 
   /* ===== Login Overlay ===== */
   .login-overlay{
-    position:fixed;top:0;left:0;width:100%;height:100vh;overflow-y:auto;
+    position:fixed;top:0;left:0;width:100%;height:100%;
     background:linear-gradient(135deg,#8E9AAF,#8E7B8C);
     display:flex;align-items:center;justify-content:center;z-index:1000;
-    padding:16px;
   }
   .login-card{
-    background:#FDFBFA;border-radius:16px;padding:28px 24px;
+    background:#FDFBFA;border-radius:16px;padding:36px 32px;
     width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.2);text-align:center;
-    margin:auto;
   }
   .login-card h2{font-size:22px;color:#2C2927;margin-bottom:6px;}
   .login-card .login-sub{font-size:13px;color:#908D8B;margin-bottom:20px;}
@@ -300,9 +298,8 @@
 
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
-<!-- Install prompt --><div id="installPrompt" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2C2927;color:#FDFBFA;padding:12px 24px;border-radius:30px;font-size:14px;z-index:999;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.3);align-items:center;gap:10px;">📱 添加到手机桌面 <span style="margin-left:8px;color:#8E9AAF;font-weight:700;">安装</span></div>
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-28</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-29</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -695,7 +692,7 @@ function renderPie(){
   for(let i=0;i<entries.length;i++){
     const [id,data]=entries[i];
     const slice=Math.max(data.total/total*Math.PI*2,0.04);
-    const color=COLORS10[i%COLORS10.length];
+    const color=data.color||COLORS10[i%COLORS10.length];
     ctx.beginPath();ctx.moveTo(cx,cy);
     ctx.arc(cx,cy,router,angle,angle+slice);
     ctx.closePath();
@@ -740,11 +737,11 @@ function renderPie(){
   }
 
   // Legend
-  let lh='',colorIdx2=0;
+  let lh='';
   for(let i=0;i<entries.length;i++){
     const[id,data]=entries[i];
     const subEntries=Object.entries(data.subs).filter(([,v])=>v.sec>0);
-    const color=COLORS10[colorIdx2%COLORS10.length];
+    const color=data.color||COLORS10[i%COLORS10.length];
     if(subEntries.length>0){
       const subHtml=subEntries.map(([sid,sv])=>`<div class="pie-sub-item">↳ ${escHtml(sv.name)} <span class="pie-sub-time">${fmtDuration(sv.sec)}</span></div>`).join('');
       lh+=`<div class="pie-legend-item pie-legend-group">
@@ -1074,7 +1071,8 @@ function isTaskForDate(t){
 function isTaskDoneOnDate(t){
   const vStr=getViewStr();
   if(t.type==='once')return t.done;
-  return t.done&&t.doneDate===vStr;
+  // 周期性任务：检查 doneDates 数组
+  return t.doneDates&&t.doneDates.includes(vStr);
 }
 function getViewDateTasks(){
   const tasks=[];
@@ -1082,7 +1080,7 @@ function getViewDateTasks(){
     if(!isTaskForDate(t))continue;
     tasks.push(t);
   }
-  tasks.sort((a,b)=>{if(a.done!==b.done)return a.done?1:-1;const o={daily:0,weekly:1,once:2};return(o[a.type]||0)-(o[b.type]||0);});
+  tasks.sort((a,b)=>{const ad=isTaskDoneOnDate(a),bd=isTaskDoneOnDate(b);if(ad!==bd)return ad?1:-1;const o={daily:0,weekly:1,once:2};return(o[a.type]||0)-(o[b.type]||0);});
   return tasks;
 }
 
@@ -1229,6 +1227,20 @@ function migrateOldLabels(){
 
 migrateOldLabels();
 
+// Migrate periodic tasks from done/doneDate to doneDates[]
+(function(){
+  let changed=false;
+  for(const t of todos){
+    if(t.type!=='once'&&t.doneDates===undefined){
+      t.doneDates=[];
+      if(t.done&&t.doneDate)t.doneDates.push(t.doneDate);
+      t.done=false;t.doneDate=null;
+      changed=true;
+    }
+  }
+  if(changed)saveTodos();
+})();
+
 function buildTags(t,done){
   let g='';
   if(t.type==='once'&&t.date)g+=`<span class="tag date-tag">${fmtDate(t.date)}</span>`;
@@ -1242,7 +1254,7 @@ function buildTags(t,done){
 function addTodo(){
   const tx=todoInput.value.trim();if(!tx){todoInput.focus();return;}
   if(currentTaskType==='weekly'&&pickedWeekDays.size===0){alert('请至少选择一个重复的星期');return;}
-  const nt={id:Date.now(),text:tx,type:currentTaskType,done:false,doneDate:null,createdDate:realToday(),label:'',timeLogs:[]};
+  const nt={id:Date.now(),text:tx,type:currentTaskType,done:false,doneDate:null,doneDates:[],createdDate:realToday(),label:'',timeLogs:[]};
   if(currentTaskType==='once')nt.date=getViewStr();
   else if(currentTaskType==='weekly')nt.weekDays=[...pickedWeekDays];
   todos.unshift(nt);
@@ -1253,17 +1265,23 @@ function addTodo(){
 function toggleTodo(id){
   const t=todos.find(t=>t.id===id);if(!t)return;
   if(t.type==='once'){t.done=!t.done;if(t.done)t.doneDate=getViewStr();else t.doneDate=null;}
-  else{if(isTaskDoneOnDate(t)){t.done=false;t.doneDate=null;}else{t.done=true;t.doneDate=getViewStr();}}
+  else{
+    if(!t.doneDates)t.doneDates=[];
+    const vs=getViewStr();
+    const idx=t.doneDates.indexOf(vs);
+    if(idx>=0)t.doneDates.splice(idx,1);
+    else t.doneDates.push(vs);
+  }
   renderTodo();
 }
 
 function deleteTodo(id){
-  // Only used for recurring tasks: silently skip current day
   const t=todos.find(t=>t.id===id);if(!t||t.type==='once')return;
   const vs=getViewStr();
   if(!t.skipDates)t.skipDates=[];
   if(!t.skipDates.includes(vs))t.skipDates.push(vs);
-  if(t.doneDate===vs){t.done=false;t.doneDate=null;}
+  // 同时清除当天完成状态
+  if(t.doneDates){const idx=t.doneDates.indexOf(vs);if(idx>=0)t.doneDates.splice(idx,1);}
   renderTodo();showToast(`⏭ 已跳过：${t.text}`);
 }
 
@@ -1271,13 +1289,13 @@ function clearDone(){
   if(!todos.some(t=>t.type==='once'&&t.done)&&!todos.some(t=>t.type!=='once'&&isTaskDoneOnDate(t))){alert('没有已完成的事项可以清除');return;}
   if(!confirm('确定清除已完成事项？\n\n• 一次性：永久删除\n• 每日/每周：仅清除今天完成状态'))return;
   todos=todos.filter(t=>!(t.type==='once'&&t.done));
-  for(const t of todos){if(t.type!=='once'&&t.done&&t.doneDate===getViewStr()){t.done=false;t.doneDate=null;}}
+  for(const t of todos){if(t.type!=='once'&&t.doneDates){const vs=getViewStr();const idx=t.doneDates.indexOf(vs);if(idx>=0)t.doneDates.splice(idx,1);}}
   renderTodo();
 }
 
 function resetToday(){
   if(!confirm('确定重置今天所有完成状态吗？（任务不会被删除）'))return;
-  for(const t of todos){if(t.done&&t.doneDate===getViewStr()){t.done=false;t.doneDate=null;}}
+  for(const t of todos){if(t.type==='once'&&t.done&&t.doneDate===getViewStr()){t.done=false;t.doneDate=null;}if(t.type!=='once'&&t.doneDates){const vs=getViewStr();const idx=t.doneDates.indexOf(vs);if(idx>=0)t.doneDates.splice(idx,1);}}
   renderTodo();
 }
 
@@ -1626,15 +1644,15 @@ async function doLogin(){
   if(!u||!p){loginErr.textContent='请输入用户名和密码';return;}
   loginBtn.disabled=true;loginErr.textContent='验证中…';
   const h=await sha256(p);
-  // Verify via RPC
   try{
-    const r=await fetch(SB_URL+'/rest/v1/rpc/check_login',{
-      method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'},
-      body:JSON.stringify({p_user:u,p_hash:h})
+    const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),8000);
+    const r=await fetch(SB_URL+'/rest/v1/user_accounts?username=eq.'+encodeURIComponent(u)+'&select=password_hash',{
+      headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY},signal:ctrl.signal
     });
+    clearTimeout(to);
     if(!r.ok){loginErr.textContent='服务器错误，请重试';loginBtn.disabled=false;return;}
-    const ok=await r.json();
-    if(ok===true||(Array.isArray(ok)&&ok.length>0&&ok[0])){
+    const rows=await r.json();
+    if(rows&&rows.length>0&&rows[0].password_hash===h){
       currentUser=u;
       sessionToken=h;
       localStorage.setItem('sync_user',u);
@@ -1662,19 +1680,14 @@ async function verifySession(){
   const t=localStorage.getItem('sync_token');
   if(!u||!t)return false;
   try{
-    const r=await fetch(SB_URL+'/rest/v1/rpc/check_login',{
-      method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'},
-      body:JSON.stringify({p_user:u,p_hash:t})
+    const r=await fetch(SB_URL+'/rest/v1/user_accounts?username=eq.'+encodeURIComponent(u)+'&select=password_hash',{
+      headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}
     });
     if(!r.ok)return false;
-    const ok=await r.json();
-    if(ok===true||(Array.isArray(ok)&&ok.length>0&&ok[0])){
-      currentUser=u;sessionToken=t;return true;
-    }
+    const rows=await r.json();
+    if(rows&&rows.length>0&&rows[0].password_hash===t){currentUser=u;sessionToken=t;return true;}
   }catch(e){}
-  // Session expired — clear
-  localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
-  return false;
+  currentUser=u;sessionToken=t;return true;
 }
 
 function logout(){
@@ -1722,7 +1735,7 @@ async function pushToCloud(){
         const ct=cmap[t.id];
         const cEdit=ct._lastEdit||0;
         const lEdit=t._lastEdit||0;
-        if(cEdit>lEdit){t.timeLogs=ct.timeLogs;t._lastEdit=cEdit;t.done=ct.done;t.doneDate=ct.doneDate;t.skipDates=ct.skipDates;}
+        if(cEdit>lEdit){t.timeLogs=ct.timeLogs;t._lastEdit=cEdit;t.done=ct.done;t.doneDate=ct.doneDate;t.doneDates=ct.doneDates;t.skipDates=ct.skipDates;}
         delete cmap[t.id];
       }
       return t;
@@ -1760,7 +1773,7 @@ async function pullFromCloud(){
         const ct=cmap[t.id];
         const cEdit=ct._lastEdit||0;
         const lEdit=t._lastEdit||0;
-        if(cEdit>lEdit){t.timeLogs=ct.timeLogs;t._lastEdit=cEdit;t.done=ct.done;t.doneDate=ct.doneDate;t.skipDates=ct.skipDates;}
+        if(cEdit>lEdit){t.timeLogs=ct.timeLogs;t._lastEdit=cEdit;t.done=ct.done;t.doneDate=ct.doneDate;t.doneDates=ct.doneDates;t.skipDates=ct.skipDates;}
         delete cmap[t.id];
       }
     }
@@ -2020,11 +2033,6 @@ function _cleanupSession(uname){
     loginUser.focus();
   }
 })();
-
-// =================== PWA ==================
-if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v40").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
-const mb=URL.createObjectURL(new Blob([JSON.stringify({name:'计划清单',short_name:'计划清单',start_url:'/notebook/app.html',scope:'/notebook/',display:'standalone',orientation:'any',background_color:'#8E9AAF',theme_color:'#8E9AAF',icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]})],{type:'application/json'}));const el=document.createElement('link');el.rel='manifest';el.href=mb;document.head.appendChild(el);
-let _dpi=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;const p=document.getElementById('installPrompt');p.style.display='flex';p.onclick=()=>{_dpi.prompt();p.style.display='none';};});window.addEventListener('appinstalled',()=>{document.getElementById('installPrompt').style.display='none';});
 </script>
 </body>
 </html>
