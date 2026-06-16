@@ -294,7 +294,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-18</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-19</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1912,12 +1912,12 @@ async function _becomeMaster(uname){
   // 1) Check localStorage (same device)
   const raw=localStorage.getItem(key);
   if(raw){try{const p=JSON.parse(raw);if(p.sid!==_sid&&now-p.ts<10000)return false;}catch(e){}}
-  // 2) Check Supabase (cross-device)
+  // 2) Check Supabase (cross-device, 30s timeout for frozen mobile tabs)
   try{
     const rows=await sbGet('user_sessions','user_id',uname);
     if(rows&&rows.length>0&&rows[0].session_id&&rows[0].session_id!==_sid&&rows[0].last_heartbeat){
       const last=new Date(rows[0].last_heartbeat).getTime();
-      if(now-last<12000)return false;
+      if(now-last<30000)return false;
     }
   }catch(e){}
   localStorage.setItem(key,JSON.stringify({sid:_sid,ts:now}));
@@ -1952,18 +1952,21 @@ function _initSessionCheck(uname){
   },800);
 }
 
-// 只读模式下每隔15秒检查主控心跳是否过期（>30秒无心跳）
+// 只读模式下每20秒检查主控是否离线
 function _startAutoTakeoverCheck(uname){
   if(_roCheckTimer)clearInterval(_roCheckTimer);
-  _roCheckTimer=setInterval(()=>{
-    const key='_master_'+uname;
+  _roCheckTimer=setInterval(async()=>{
+    const key='_master_'+uname;const now=Date.now();
+    // 先检查 localStorage（同设备）
     const raw=localStorage.getItem(key);
-    if(!raw){_takeover(uname);return;}
+    if(raw){try{if(now-JSON.parse(raw).ts>15000){_takeover(uname);}}catch(e){_takeover(uname);}return;}
+    // 没有本地心跳（跨设备场景）：检查 Supabase
     try{
-      const p=JSON.parse(raw);
-      if(Date.now()-p.ts>12000){_takeover(uname);}
-    }catch(e){}
-  },15000);
+      const rows=await sbGet('user_sessions','user_id',uname);
+      if(!rows||rows.length===0||!rows[0].last_heartbeat){_takeover(uname);return;}
+      if(now-new Date(rows[0].last_heartbeat).getTime()>45000){_takeover(uname);}
+    }catch(e){/* 网络错误不接管 */}
+  },20000);
 }
 
 function _takeover(uname){

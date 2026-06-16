@@ -2,7 +2,12 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#8E9AAF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="计划清单">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%238E9AAF%22 width=%22100%22 height=%22100%22 rx=%2220%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 font-size=%2250%22>📋</text></svg>">
 <title>📋 计划清单</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -287,6 +292,8 @@
     .container{border-radius:0;max-width:100%;}
     .header{padding:14px 16px;}
   }
+
+<!-- Install prompt --><div id="installPrompt" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2C2927;color:#FDFBFA;padding:12px 24px;border-radius:30px;font-size:14px;z-index:999;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.3);align-items:center;gap:10px;">📱 添加到手机桌面 <span style="margin-left:8px;color:#8E9AAF;font-weight:700;">安装</span></div>
 </style>
 </head>
 <body>
@@ -294,7 +301,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-18</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-19</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1912,12 +1919,12 @@ async function _becomeMaster(uname){
   // 1) Check localStorage (same device)
   const raw=localStorage.getItem(key);
   if(raw){try{const p=JSON.parse(raw);if(p.sid!==_sid&&now-p.ts<10000)return false;}catch(e){}}
-  // 2) Check Supabase (cross-device)
+  // 2) Check Supabase (cross-device, 30s timeout for frozen mobile tabs)
   try{
     const rows=await sbGet('user_sessions','user_id',uname);
     if(rows&&rows.length>0&&rows[0].session_id&&rows[0].session_id!==_sid&&rows[0].last_heartbeat){
       const last=new Date(rows[0].last_heartbeat).getTime();
-      if(now-last<12000)return false;
+      if(now-last<30000)return false;
     }
   }catch(e){}
   localStorage.setItem(key,JSON.stringify({sid:_sid,ts:now}));
@@ -1952,18 +1959,21 @@ function _initSessionCheck(uname){
   },800);
 }
 
-// 只读模式下每隔15秒检查主控心跳是否过期（>30秒无心跳）
+// 只读模式下每20秒检查主控是否离线
 function _startAutoTakeoverCheck(uname){
   if(_roCheckTimer)clearInterval(_roCheckTimer);
-  _roCheckTimer=setInterval(()=>{
-    const key='_master_'+uname;
+  _roCheckTimer=setInterval(async()=>{
+    const key='_master_'+uname;const now=Date.now();
+    // 先检查 localStorage（同设备）
     const raw=localStorage.getItem(key);
-    if(!raw){_takeover(uname);return;}
+    if(raw){try{if(now-JSON.parse(raw).ts>15000){_takeover(uname);}}catch(e){_takeover(uname);}return;}
+    // 没有本地心跳（跨设备场景）：检查 Supabase
     try{
-      const p=JSON.parse(raw);
-      if(Date.now()-p.ts>12000){_takeover(uname);}
-    }catch(e){}
-  },15000);
+      const rows=await sbGet('user_sessions','user_id',uname);
+      if(!rows||rows.length===0||!rows[0].last_heartbeat){_takeover(uname);return;}
+      if(now-new Date(rows[0].last_heartbeat).getTime()>45000){_takeover(uname);}
+    }catch(e){/* 网络错误不接管 */}
+  },20000);
 }
 
 function _takeover(uname){
@@ -2012,6 +2022,11 @@ function _cleanupSession(uname){
     loginUser.focus();
   }
 })();
+
+// =================== PWA ==================
+if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v37").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
+const mb=URL.createObjectURL(new Blob([JSON.stringify({name:'计划清单',short_name:'计划清单',start_url:'/notebook/app.html',scope:'/notebook/',display:'standalone',orientation:'any',background_color:'#8E9AAF',theme_color:'#8E9AAF',icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]})],{type:'application/json'}));const el=document.createElement('link');el.rel='manifest';el.href=mb;document.head.appendChild(el);
+let _dpi=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;const p=document.getElementById('installPrompt');p.style.display='flex';p.onclick=()=>{_dpi.prompt();p.style.display='none';};});window.addEventListener('appinstalled',()=>{document.getElementById('installPrompt').style.display='none';});
 </script>
 </body>
 </html>
