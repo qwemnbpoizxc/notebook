@@ -294,7 +294,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-17</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-18</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1906,12 +1906,22 @@ window.addEventListener('storage',e=>{
   }catch(e){}
 });
 
-function _becomeMaster(uname){
+async function _becomeMaster(uname){
   const key='_master_'+uname;
   const now=Date.now();
+  // 1) Check localStorage (same device)
   const raw=localStorage.getItem(key);
   if(raw){try{const p=JSON.parse(raw);if(p.sid!==_sid&&now-p.ts<10000)return false;}catch(e){}}
+  // 2) Check Supabase (cross-device)
+  try{
+    const rows=await sbGet('user_sessions','user_id',currentUser);
+    if(rows&&rows.length>0&&rows[0].session_id&&rows[0].session_id!==_sid&&rows[0].last_heartbeat){
+      const last=new Date(rows[0].last_heartbeat).getTime();
+      if(now-last<12000)return false;
+    }
+  }catch(e){}
   localStorage.setItem(key,JSON.stringify({sid:_sid,ts:now}));
+  await sbUpsert('user_sessions',{user_id:currentUser,session_id:_sid,last_heartbeat:new Date().toISOString()}).catch(()=>{});
   return true;
 }
 function _startHeartbeat(uname){
@@ -1920,15 +1930,20 @@ function _startHeartbeat(uname){
   _hbTimer=setInterval(()=>{
     const raw=localStorage.getItem(key);
     try{if(raw&&JSON.parse(raw).sid!==_sid)return;}catch(e){}
-    localStorage.setItem(key,JSON.stringify({sid:_sid,ts:Date.now()}));
+    const data={sid:_sid,ts:Date.now()};
+    localStorage.setItem(key,JSON.stringify(data));
+    // 同步心跳到云端，用于跨设备检测
+    if(currentUser&&currentUser!=='__guest__'){
+      sbUpsert('user_sessions',{user_id:currentUser,session_id:_sid,last_heartbeat:new Date().toISOString()}).catch(()=>{});
+    }
   },5000);
 }
 
 let _roCheckTimer=null;
 
 function _initSessionCheck(uname){
-  setTimeout(()=>{
-    if(!_becomeMaster(uname)){
+  setTimeout(async()=>{
+    if(!await _becomeMaster(uname)){
       isReadOnly=true;_setupReadOnlyUI();
       _startAutoTakeoverCheck(uname);  // 定期检测主控是否离线
     }else{
@@ -1953,7 +1968,7 @@ function _startAutoTakeoverCheck(uname){
 
 function _takeover(uname){
   if(_roCheckTimer)clearInterval(_roCheckTimer);
-  _becomeMaster(uname);
+  _becomeMaster(uname).catch(()=>{});
   _removeReadOnlyUI();isReadOnly=false;
   _startHeartbeat(uname);
   showToast('🟢 主窗口已离线，本窗口接管为操作窗口');
