@@ -304,7 +304,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-11</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.16-12</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -520,7 +520,8 @@ function _syncTimerToLogs(){
   const existing=t.timeLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.seconds,0);
   t.timeLogs=t.timeLogs.filter(l=>l.date!==today);
   t.timeLogs.push({date:today,seconds:existing+elapsed});
-  saveTodos(); // ← 立即持久化，beforeunload 中必须同步写入
+  t._lastEdit=Date.now();
+  saveTodos();
 }
 
 function tick(){
@@ -544,10 +545,12 @@ function addManualTime(id,seconds){
   const t=todos.find(x=>x.id===id);if(!t)return;
   if(!t.timeLogs)t.timeLogs=[];
   const viewDay=getViewStr();
-  // 删除当天旧数据，如果传入 0 就清空，否则写入新值
   t.timeLogs=t.timeLogs.filter(l=>l.date!==viewDay);
   if(seconds>0)t.timeLogs.push({date:viewDay,seconds});
+  t._lastEdit=Date.now(); // 手动编辑标记，合并时此标记更大的优先
   saveTodos();renderPie();renderTodo();
+  // 立即推送，不等 debounce
+  if(currentUser&&currentUser!=='__guest__'){clearTimeout(_syncTimer);pushToCloud();}
 }
 
 // =================== 页面隐藏/关闭时保存计时 ===================
@@ -1720,9 +1723,9 @@ async function pushToCloud(){
     mergedTds=todos.map(t=>{
       if(cmap[t.id]){
         const ct=cmap[t.id];
-        const cTotal=(ct.timeLogs||[]).reduce((s,l)=>s+l.seconds,0);
-        const lTotal=(t.timeLogs||[]).reduce((s,l)=>s+l.seconds,0);
-        if(cTotal>lTotal){t.timeLogs=ct.timeLogs;t.done=ct.done;t.doneDate=ct.doneDate;t.skipDates=ct.skipDates;}
+        const cEdit=ct._lastEdit||0;
+        const lEdit=t._lastEdit||0;
+        if(cEdit>lEdit){t.timeLogs=ct.timeLogs;t._lastEdit=cEdit;t.done=ct.done;t.doneDate=ct.doneDate;t.skipDates=ct.skipDates;}
         delete cmap[t.id];
       }
       return t;
@@ -1752,20 +1755,18 @@ async function pullFromCloud(){
       const lb=labels.find(l=>l.name===t.label);t.label=lb?lb.id:0;
     }
   }
-  // Merge cloud data with local: for timeLogs, take the one with more total seconds
+  // Merge cloud data with local using _lastEdit timestamp
   if(rd.todos){
     const cmap={};for(const t of rd.todos)cmap[t.id]=t;
     for(const t of todos){
       if(cmap[t.id]){
         const ct=cmap[t.id];
-        const cTotal=(ct.timeLogs||[]).reduce((s,l)=>s+l.seconds,0);
-        const lTotal=(t.timeLogs||[]).reduce((s,l)=>s+l.seconds,0);
-        if(lTotal>cTotal)t.timeLogs=t.timeLogs;// keep local (more complete)
-        else{t.timeLogs=ct.timeLogs;t.done=ct.done;t.doneDate=ct.doneDate;t.skipDates=ct.skipDates;}
+        const cEdit=ct._lastEdit||0;
+        const lEdit=t._lastEdit||0;
+        if(cEdit>lEdit){t.timeLogs=ct.timeLogs;t._lastEdit=cEdit;t.done=ct.done;t.doneDate=ct.doneDate;t.skipDates=ct.skipDates;}
         delete cmap[t.id];
       }
     }
-    // Add cloud-only todos
     for(const[_,ct]of Object.entries(cmap))todos.push(ct);
   }
   if(rd.countdowns)countdowns=rd.countdowns;
@@ -1984,7 +1985,7 @@ function _cleanupSession(uname){
 })();
 
 // =================== PWA ==================
-if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v29").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
+if('serviceWorker' in navigator){const s=URL.createObjectURL(new Blob(['self.addEventListener("install",e=>{e.waitUntil(caches.open("nb-v30").then(c=>c.addAll(["/notebook/app.html"])))});self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});'],{type:'application/javascript'}));navigator.serviceWorker.register(s,{scope:'/notebook/'}).catch(()=>{});}
 const mb=URL.createObjectURL(new Blob([JSON.stringify({name:'计划清单',short_name:'计划清单',start_url:'/notebook/app.html',scope:'/notebook/',display:'standalone',orientation:'any',background_color:'#8E9AAF',theme_color:'#8E9AAF',icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#8E9AAF" width="100" height="100" rx="20"/><text x="50" y="55" text-anchor="middle" font-size="50">📋</text></svg>'),sizes:'100x100',type:'image/svg+xml'}]})],{type:'application/json'}));const el=document.createElement('link');el.rel='manifest';el.href=mb;document.head.appendChild(el);
 let _dpi=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dpi=e;const p=document.getElementById('installPrompt');p.style.display='flex';p.onclick=()=>{_dpi.prompt();p.style.display='none';};});window.addEventListener('appinstalled',()=>{document.getElementById('installPrompt').style.display='none';});
 </script>
