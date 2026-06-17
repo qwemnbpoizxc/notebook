@@ -482,6 +482,7 @@ function startTimer(id){
   activeTimer={todoId:id,startTime:now};
   _writeTimerFile(now,now);
   if(!tickInterval){tickInterval=setInterval(tick,1000);}
+  renderTodo();renderPie();
 }
 
 function _writeTimerFile(start,lastTick){
