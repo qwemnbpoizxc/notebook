@@ -127,9 +127,9 @@
   .label-select{font-size:13px;padding:3px 5px;border:1.5px solid #D5D2D0;border-radius:5px;outline:none;color:#5C5957;cursor:pointer;background:#FDFBFA;flex-shrink:0;max-width:80px;}
   .label-select:focus{border-color:#8E9AAF;}
   .timer-row{display:flex;align-items:center;gap:5px;}
-  .timer-btn{width:28px;height:28px;border:2px solid #C5C0BD;background:#F8F5F3;border-radius:50%;cursor:pointer;font-size:15px;color:#7A7673;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0;}
-  .timer-btn:hover{border-color:#8E9AAF;color:#8E9AAF;background:#F0EDEB;}
-  .timer-btn.playing{background:#C49090;border-color:#B88080;color:#FDFBFA;animation:pulse 1.2s ease-in-out infinite;box-shadow:0 0 10px rgba(196,144,144,0.4);}
+  .timer-btn{width:24px;height:24px;border:1.5px solid #D5D2D0;background:#FDFBFA;border-radius:50%;cursor:pointer;font-size:14px;color:#908D8B;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0;}
+  .timer-btn:hover{border-color:#8E9AAF;color:#8E9AAF;}
+  .timer-btn.playing{background:#E0736A;border-color:#E0736A;color:#FFF;animation:pulse 1.2s ease-in-out infinite;box-shadow:0 0 8px rgba(224,115,106,0.45);}
   @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
   .timer-display{font-size:14px;color:#5C5957;min-width:40px;text-align:center;font-variant-numeric:tabular-nums;}
   .timer-input{width:60px;padding:3px 4px;border:1.5px solid #D5D2D0;border-radius:4px;font-size:13px;text-align:center;outline:none;}
@@ -299,7 +299,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.17-15</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.17-16</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
