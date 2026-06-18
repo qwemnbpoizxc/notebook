@@ -1662,8 +1662,12 @@ async function doLogin(){
       logoutBtn.textContent='👤 '+u+'（退出）';
       storageIndicator.textContent='☁️ 加载中…';
       const _tp=extractTimerPending();
+      const _backupLabels=[...labels],_backupCd=[...countdowns],_backupCu=[...countups];
       clearAllData();
       await pullFromCloud();
+      if(labels.length===0&&_backupLabels.length>0){labels=_backupLabels;saveLabels();}
+      if(countdowns.length===0&&_backupCd.length>0){countdowns=_backupCd;saveCd();}
+      if(countups.length===0&&_backupCu.length>0){countups=_backupCu;saveCu();}
       applyPendingTimer(_tp);
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
       syncToCloud();
@@ -1742,7 +1746,18 @@ async function pushToCloud(){
     });
     for(const[,ct]of Object.entries(cmap))mergedTds.push(ct);
   }
-  const payload={todos:mergedTds,countdowns,countups,labels,updatedAt:Date.now()};
+  // 合并 labels：本地为主，但保留云端有而本地没有的标签
+  let mergedLabels=labels;
+  if(cloudRows&&cloudRows.length>0&&cloudRows[0].data&&cloudRows[0].data.labels&&cloudRows[0].data.labels.length>0){
+    const cLabels=cloudRows[0].data.labels;
+    const localIds=new Set(mergedLabels.map(l=>l.id));
+    for(const cl of cLabels){if(!localIds.has(cl.id))mergedLabels.push(cl);}
+  }
+  if(mergedLabels.length===0&&cloudRows&&cloudRows.length>0&&cloudRows[0].data&&cloudRows[0].data.labels&&cloudRows[0].data.labels.length>0){
+    mergedLabels=cloudRows[0].data.labels;
+  }
+  labels=mergedLabels;
+  const payload={todos:mergedTds,countdowns,countups,labels:mergedLabels,updatedAt:Date.now()};
   // 合并后写回全局 todos，确保本地和云端一致
   todos=mergedTds;
   saveTodos();
@@ -1781,7 +1796,7 @@ async function pullFromCloud(){
   }
   if(rd.countdowns)countdowns=rd.countdowns;
   if(rd.countups)countups=rd.countups;
-  if(rd.labels)labels=rd.labels;
+  if(rd.labels&&Array.isArray(rd.labels)&&rd.labels.length>0)labels=rd.labels;
   saveList(SK,todos);saveList(CDK,countdowns);saveList(CUK,countups);
   localStorage.setItem('my_labels',JSON.stringify(labels));
   storageIndicator.textContent='☁️ 已加载云端数据';
@@ -2017,8 +2032,12 @@ function _cleanupSession(uname){
         logoutBtn.textContent='👤 '+savedUser+'（退出）';
         storageIndicator.textContent='☁️ 加载中…';
         const _tp=extractTimerPending();
+        const _backupLabels=[...labels],_backupCd=[...countdowns],_backupCu=[...countups];
         clearAllData();
         pullFromCloud().then(()=>{
+          if(labels.length===0&&_backupLabels.length>0){labels=_backupLabels;saveLabels();}
+          if(countdowns.length===0&&_backupCd.length>0){countdowns=_backupCd;saveCd();}
+          if(countups.length===0&&_backupCu.length>0){countups=_backupCu;saveCu();}
           applyPendingTimer(_tp);
           renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
           syncToCloud();
