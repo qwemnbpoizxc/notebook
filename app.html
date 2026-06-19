@@ -192,6 +192,7 @@
   .pie-sub-time{font-weight:500;color:#5C5957;}
   .pie-legend-group .pie-legend-time{color:#8E9AAF;}
   .no-data-hint{text-align:center;font-size:13px;color:#C8C5C3;padding:24px 8px;}
+  .pie-avg-stat{text-align:center;font-size:12px;color:#8E9AAF;padding:6px 0 2px;border-top:1px dotted #EBE8E6;margin-top:6px;}
   /* Label management */
   .label-mgr{padding:8px 14px;border-top:1px solid #EBE8E6;flex-shrink:0;}
   .color-swatches{display:none;flex-wrap:wrap;gap:5px;align-items:center;}
@@ -299,7 +300,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.17-17</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.17-18</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -441,6 +442,21 @@ function fmtDuration(sec){
   else if(m>0)r+=`${m}分${String(s).padStart(2,'0')}秒`;
   else r+=`${s}秒`;
   return r;
+}
+function calcDailyAverage(){
+  const dailyMap={};
+  const today=realToday();
+  for(const t of todos){
+    if(!t.timeLogs)continue;
+    for(const l of t.timeLogs){
+      if(l.date>=today)continue;
+      dailyMap[l.date]=(dailyMap[l.date]||0)+l.seconds;
+    }
+  }
+  const days=Object.values(dailyMap).filter(s=>s>7200);
+  if(days.length===0)return null;
+  const avg=Math.round(days.reduce((a,b)=>a+b,0)/days.length);
+  return {avgSec:avg,count:days.length};
 }
 
 // =================== 数据存储 ===================
@@ -758,6 +774,11 @@ function renderPie(){
         <span class="pie-legend-time">${fmtDuration(data.total)}</span>
       </div>`;
     }
+  }
+  // 每日平均统计（仅>2h的已过天数）
+  if(timePeriod==='all'){
+    const da=calcDailyAverage();
+    if(da)lh+=`<div class="pie-avg-stat">📊 ${da.count}天日均 ${fmtDuration(da.avgSec)}</div>`;
   }
   legend.innerHTML=lh;
 
