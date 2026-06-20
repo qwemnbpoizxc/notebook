@@ -300,7 +300,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.20-01</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.20-02</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1790,6 +1790,19 @@ async function pushToCloud(){
     mergedLabels=cloudRows[0].data.labels;
   }
   labels=mergedLabels;
+  // 🔒 防线：如果合并后todos为空但云端有数据，绝不覆盖
+  if(mergedTds.length===0&&cloudRows&&cloudRows.length>0&&cloudRows[0].data&&cloudRows[0].data.todos&&cloudRows[0].data.todos.length>0){
+    console.warn('⚠️ 本地todos为空，拒绝覆盖云端数据');
+    storageIndicator.textContent='⚠️ 同步被阻止 (本地数据异常)';
+    return;
+  }
+  // 🔒 防线：todos数量异常减少超过50%也阻止
+  const cloudTodoCount=cloudRows&&cloudRows.length>0&&cloudRows[0].data&&cloudRows[0].data.todos?cloudRows[0].data.todos.length:0;
+  if(cloudTodoCount>10&&mergedTds.length<cloudTodoCount*0.5){
+    console.warn('⚠️ todos数量异常减少 '+(cloudTodoCount-mergedTds.length)+' 条，拒绝覆盖');
+    storageIndicator.textContent='⚠️ 同步被阻止 (数据异常减少)';
+    return;
+  }
   const payload={todos:mergedTds,countdowns,countups,labels:mergedLabels,updatedAt:Date.now()};
   // 合并后写回全局 todos，确保本地和云端一致
   todos=mergedTds;
