@@ -1683,18 +1683,9 @@ async function doLogin(){
       logoutBtn.textContent='👤 '+u+'（退出）';
       storageIndicator.textContent='☁️ 加载中…';
       const _tp=extractTimerPending();
-      const _backupTodos=[...todos],_backupLabels=[...labels],_backupCd=[...countdowns],_backupCu=[...countups];
-      clearAllData();
       try{
         await pullFromCloud();
-        if(todos.length===0&&_backupTodos.length>0){todos=_backupTodos;saveTodos();}
-        if(labels.length===0&&_backupLabels.length>0){labels=_backupLabels;saveLabels();}
-        if(countdowns.length===0&&_backupCd.length>0){countdowns=_backupCd;saveCd();}
-        if(countups.length===0&&_backupCu.length>0){countups=_backupCu;saveCu();}
       }catch(e){
-        // 网络失败：恢复全部本地数据
-        todos=_backupTodos;labels=_backupLabels;countdowns=_backupCd;countups=_backupCu;
-        saveTodos();saveLabels();saveCd();saveCu();
         storageIndicator.textContent='⚠️ 离线 (云端不可达)';
       }
       applyPendingTimer(_tp);
@@ -2063,22 +2054,13 @@ function _cleanupSession(uname){
         logoutBtn.textContent='👤 '+savedUser+'（退出）';
         storageIndicator.textContent='☁️ 加载中…';
         const _tp=extractTimerPending();
-        const _backupTodos=[...todos],_backupLabels=[...labels],_backupCd=[...countdowns],_backupCu=[...countups];
-        clearAllData();
         pullFromCloud().then(()=>{
-          if(todos.length===0&&_backupTodos.length>0){todos=_backupTodos;saveTodos();}
-          if(labels.length===0&&_backupLabels.length>0){labels=_backupLabels;saveLabels();}
-          if(countdowns.length===0&&_backupCd.length>0){countdowns=_backupCd;saveCd();}
-          if(countups.length===0&&_backupCu.length>0){countups=_backupCu;saveCu();}
           applyPendingTimer(_tp);
           renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
           syncToCloud();
           todoInput.focus();
           _initSessionCheck(savedUser);
         }).catch(()=>{
-          // 网络失败：恢复全部本地数据
-          todos=_backupTodos;labels=_backupLabels;countdowns=_backupCd;countups=_backupCu;
-          saveTodos();saveLabels();saveCd();saveCu();
           applyPendingTimer(_tp);
           renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
           storageIndicator.textContent='⚠️ 离线 (云端不可达)';
