@@ -332,7 +332,7 @@
           <button class="tp-btn" data-period="month">本月</button>
           <button class="tp-btn" data-period="all">累计</button>
         </div>
-        <div class="pie-canvas-wrap"><canvas id="pieCanvas" width="300" height="300"></canvas></div>
+        <div class="pie-canvas-wrap"><canvas id="pieCanvas" width="340" height="340"></canvas></div>
         <div class="pie-tooltip" id="pieTooltip" style="display:none;position:fixed;background:rgba(0,0,0,.85);color:#FDFBFA;padding:6px 10px;border-radius:8px;font-size:13px;z-index:100;pointer-events:none;white-space:nowrap;"></div>
         <div class="pie-legend" id="pieLegend"></div>
       </div>
@@ -692,7 +692,7 @@ function renderPie(){
 
   const legend=document.getElementById('pieLegend');
   const c=document.getElementById('pieCanvas'),ctx=c.getContext('2d');
-  const cx=c.width/2,cy=c.height/2,rinner=36,router=72;
+  const cx=c.width/2,cy=c.height/2,rinner=44,router=88;
   ctx.clearRect(0,0,c.width,c.height);
 
   if(entries.length===0){
@@ -739,16 +739,16 @@ function renderPie(){
     }else{
       // Staggered outside labels
       const isLeft=Math.cos(mid)<0;
-      let bestR=router+12;const step=14;
-      for(let attempt=0;attempt<6;attempt++){
-        const testR=router+12+attempt*step;
+      let bestR=router+10;const step=13;
+      for(let attempt=0;attempt<5;attempt++){
+        const testR=router+10+attempt*step;
         const tx=cx+Math.cos(mid)*testR,ty=cy+Math.sin(mid)*testR;
         const sw=ctx.measureText(name).width;
         let overlaps=false;
         for(const pl of placedLabels){
           if(Math.abs(tx-pl.tx)<pl.hw/2+sw/2+6&&Math.abs(ty-pl.ty)<14){overlaps=true;break;}
         }
-        if(!overlaps||attempt===5){bestR=testR;break;}
+        if(!overlaps||attempt===4){bestR=testR;break;}
       }
       const tx=cx+Math.cos(mid)*bestR,ty=cy+Math.sin(mid)*bestR;
       ctx.fillStyle='#2C2927';ctx.font='11px sans-serif';
@@ -816,8 +816,8 @@ document.getElementById('pieCanvas').addEventListener('mousemove',e=>{
   for(const s of slices){
     let sa=s.startAngle,sb=s.endAngle;
     if(sa<-Math.PI/2)sa+=Math.PI*2;if(sb<-Math.PI/2)sb+=Math.PI*2;
-    if(angle>=sa&&angle<=sb&&dist<=72&&dist>=36){hit=s;break;}
-    if(sa>sb){if((angle>=sa||angle<=sb)&&dist<=72&&dist>=36){hit=s;break;}}
+    if(angle>=sa&&angle<=sb&&dist<=88&&dist>=44){hit=s;break;}
+    if(sa>sb){if((angle>=sa||angle<=sb)&&dist<=88&&dist>=44){hit=s;break;}}
   }
   if(hit){
     const subs=Object.entries(hit.data.subs).filter(([,v])=>v.sec>0);
