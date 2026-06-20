@@ -1696,11 +1696,17 @@ async function doLogin(){
       const _tp=extractTimerPending();
       const _backupTodos=[...todos],_backupLabels=[...labels],_backupCd=[...countdowns],_backupCu=[...countups];
       clearAllData();
-      await pullFromCloud();
-      if(todos.length===0&&_backupTodos.length>0){todos=_backupTodos;saveTodos();}
-      if(labels.length===0&&_backupLabels.length>0){labels=_backupLabels;saveLabels();}
-      if(countdowns.length===0&&_backupCd.length>0){countdowns=_backupCd;saveCd();}
-      if(countups.length===0&&_backupCu.length>0){countups=_backupCu;saveCu();}
+      try{
+        await pullFromCloud();
+        if(todos.length===0&&_backupTodos.length>0){todos=_backupTodos;saveTodos();}
+        if(labels.length===0&&_backupLabels.length>0){labels=_backupLabels;saveLabels();}
+        if(countdowns.length===0&&_backupCd.length>0){countdowns=_backupCd;saveCd();}
+        if(countups.length===0&&_backupCu.length>0){countups=_backupCu;saveCu();}
+      }catch(e){
+        todos=_backupTodos;labels=_backupLabels;countdowns=_backupCd;countups=_backupCu;
+        saveTodos();saveLabels();saveCd();saveCu();
+        storageIndicator.textContent='⚠️ 离线 (云端不可达)';
+      }
       applyPendingTimer(_tp);
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
       syncToCloud();
@@ -2079,6 +2085,13 @@ function _cleanupSession(uname){
           syncToCloud();
           todoInput.focus();
           _initSessionCheck(savedUser);
+        }).catch(()=>{
+          todos=_backupTodos;labels=_backupLabels;countdowns=_backupCd;countups=_backupCu;
+          saveTodos();saveLabels();saveCd();saveCu();
+          applyPendingTimer(_tp);
+          renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+          storageIndicator.textContent='⚠️ 离线 (云端不可达)';
+          todoInput.focus();_initSessionCheck(savedUser);
         });
       }else{
         loginUser.focus();
