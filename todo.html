@@ -1758,10 +1758,18 @@ async function sbGet(table,eqCol,eqVal){
   }catch(e){console.error('GET err:',e);return null;}
 }
 
+let _cloudVersion=parseInt(localStorage.getItem('_cloud_version')||'0',10)||0;
+
 async function pushToCloud(){
   if(!currentUser||currentUser==='__guest__')return;
   // Pull current cloud state, merge timeLogs (keep larger), then push
   const cloudRows=await sbGet('user_data','user_id',currentUser);
+  const cloudVersion=cloudRows&&cloudRows.length>0&&cloudRows[0].data?cloudRows[0].data._version||0:0;
+  // 版本冲突：本地版本落后，说明别人已推送，先拉取
+  if(cloudVersion>0&&_cloudVersion>0&&_cloudVersion<cloudVersion){
+    console.warn('⚠️ 版本冲突 (本地'+_cloudVersion+' < 云端'+cloudVersion+')，先拉取再推送');
+    await pullFromCloud();
+  }
   let mergedTds=todos;
   if(cloudRows&&cloudRows.length>0&&cloudRows[0].data&&cloudRows[0].data.todos){
     const ctodo=cloudRows[0].data.todos;
@@ -1803,12 +1811,14 @@ async function pushToCloud(){
     storageIndicator.textContent='⚠️ 同步被阻止 (数据异常减少)';
     return;
   }
-  const payload={todos:mergedTds,countdowns,countups,labels:mergedLabels,updatedAt:Date.now()};
+  const newVersion=(cloudVersion||_cloudVersion||0)+1;
+  const payload={_version:newVersion,todos:mergedTds,countdowns,countups,labels:mergedLabels,updatedAt:Date.now()};
   // 合并后写回全局 todos，确保本地和云端一致
   todos=mergedTds;
   saveTodos();
   const ok=await sbUpsert('user_data',{user_id:currentUser,data:payload});
   if(ok){
+    _cloudVersion=newVersion;localStorage.setItem('_cloud_version',String(newVersion));
     storageIndicator.textContent='☁️ 已同步';
     storageIndicator.classList.add('file-mode');
     setTimeout(()=>{storageIndicator.textContent='💻 浏览器存储';storageIndicator.classList.remove('file-mode');},2000);
@@ -1847,6 +1857,7 @@ async function pullFromCloud(){
   if(rd.labels&&Array.isArray(rd.labels)&&rd.labels.length>0)labels=rd.labels;
   saveList(SK,todos);saveList(CDK,countdowns);saveList(CUK,countups);
   localStorage.setItem('my_labels',JSON.stringify(labels));
+  if(rd._version){_cloudVersion=rd._version;localStorage.setItem('_cloud_version',String(rd._version));}
   storageIndicator.textContent='☁️ 已加载云端数据';
   storageIndicator.classList.add('file-mode');
   setTimeout(()=>{storageIndicator.textContent='💻 浏览器存储';storageIndicator.classList.remove('file-mode');},2000);
