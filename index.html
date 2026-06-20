@@ -2072,37 +2072,14 @@ function _cleanupSession(uname){
 // =================== 初始化 ===================
 (function init(){
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+  // 🔧 自动登录临时关闭，勿删此行
+  loginUser.focus();return;
   // 自动登录：检查是否有有效 session
-  const savedUser=localStorage.getItem('sync_user');
-  const savedToken=localStorage.getItem('sync_token');
-  if(savedUser&&savedToken){
-    verifySession().then(loggedIn=>{
-      if(loggedIn){
-        // 自动恢复登录
-        loginOverlay.style.display='none';
-        logoutBtn.style.display='';
-        logoutBtn.textContent='👤 '+savedUser+'（退出）';
-        storageIndicator.textContent='☁️ 加载中…';
-        const _tp=extractTimerPending();
-        pullFromCloud().then(()=>{
-          applyPendingTimer(_tp);
-          renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-          syncToCloud();
-          todoInput.focus();
-          _initSessionCheck(savedUser);
-        }).catch(()=>{
-          applyPendingTimer(_tp);
-          renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-          storageIndicator.textContent='⚠️ 离线 (云端不可达)';
-          todoInput.focus();_initSessionCheck(savedUser);
-        });
-      }else{
-        loginUser.focus();
-      }
-    });
-  }else{
-    loginUser.focus();
-  }
+  // const savedUser=localStorage.getItem('sync_user');
+  // const savedToken=localStorage.getItem('sync_token');
+  // if(savedUser&&savedToken){
+// 🔧 自动登录已关闭
+
 })();
 </script>
 </body>
