@@ -300,7 +300,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.17-18</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.20-01</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -332,7 +332,7 @@
           <button class="tp-btn" data-period="month">本月</button>
           <button class="tp-btn" data-period="all">累计</button>
         </div>
-        <div class="pie-canvas-wrap"><canvas id="pieCanvas" width="240" height="240"></canvas></div>
+        <div class="pie-canvas-wrap"><canvas id="pieCanvas" width="300" height="300"></canvas></div>
         <div class="pie-tooltip" id="pieTooltip" style="display:none;position:fixed;background:rgba(0,0,0,.85);color:#FDFBFA;padding:6px 10px;border-radius:8px;font-size:13px;z-index:100;pointer-events:none;white-space:nowrap;"></div>
         <div class="pie-legend" id="pieLegend"></div>
       </div>
@@ -693,7 +693,7 @@ function renderPie(){
 
   const legend=document.getElementById('pieLegend');
   const c=document.getElementById('pieCanvas'),ctx=c.getContext('2d');
-  const cx=c.width/2,cy=c.height/2,rinner=42,router=80;
+  const cx=c.width/2,cy=c.height/2,rinner=36,router=72;
   ctx.clearRect(0,0,c.width,c.height);
 
   if(entries.length===0){
@@ -817,8 +817,8 @@ document.getElementById('pieCanvas').addEventListener('mousemove',e=>{
   for(const s of slices){
     let sa=s.startAngle,sb=s.endAngle;
     if(sa<-Math.PI/2)sa+=Math.PI*2;if(sb<-Math.PI/2)sb+=Math.PI*2;
-    if(angle>=sa&&angle<=sb&&dist<=80&&dist>=42){hit=s;break;}
-    if(sa>sb){if((angle>=sa||angle<=sb)&&dist<=80&&dist>=42){hit=s;break;}}
+    if(angle>=sa&&angle<=sb&&dist<=72&&dist>=36){hit=s;break;}
+    if(sa>sb){if((angle>=sa||angle<=sb)&&dist<=72&&dist>=36){hit=s;break;}}
   }
   if(hit){
     const subs=Object.entries(hit.data.subs).filter(([,v])=>v.sec>0);
