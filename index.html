@@ -1694,9 +1694,10 @@ async function doLogin(){
       logoutBtn.textContent='👤 '+u+'（退出）';
       storageIndicator.textContent='☁️ 加载中…';
       const _tp=extractTimerPending();
-      const _backupLabels=[...labels],_backupCd=[...countdowns],_backupCu=[...countups];
+      const _backupTodos=[...todos],_backupLabels=[...labels],_backupCd=[...countdowns],_backupCu=[...countups];
       clearAllData();
       await pullFromCloud();
+      if(todos.length===0&&_backupTodos.length>0){todos=_backupTodos;saveTodos();}
       if(labels.length===0&&_backupLabels.length>0){labels=_backupLabels;saveLabels();}
       if(countdowns.length===0&&_backupCd.length>0){countdowns=_backupCd;saveCd();}
       if(countups.length===0&&_backupCu.length>0){countups=_backupCu;saveCu();}
@@ -1807,13 +1808,15 @@ async function pullFromCloud(){
   if(!rows||rows.length===0)return false;
   const rd=rows[0].data;
   if(!rd)return false;
-  if(rd.todos)for(const t of rd.todos){
-    if(typeof t.label==='string'&&t.label){
-      const lb=labels.find(l=>l.name===t.label);t.label=lb?lb.id:0;
+  if(rd.todos&&Array.isArray(rd.todos)&&rd.todos.length>0){
+    for(const t of rd.todos){
+      if(typeof t.label==='string'&&t.label){
+        const lb=labels.find(l=>l.name===t.label);t.label=lb?lb.id:0;
+      }
     }
   }
   // Merge cloud data with local using _lastEdit timestamp
-  if(rd.todos){
+  if(rd.todos&&Array.isArray(rd.todos)&&rd.todos.length>0){
     const cmap={};for(const t of rd.todos)cmap[t.id]=t;
     for(const t of todos){
       if(cmap[t.id]){
@@ -2064,9 +2067,10 @@ function _cleanupSession(uname){
         logoutBtn.textContent='👤 '+savedUser+'（退出）';
         storageIndicator.textContent='☁️ 加载中…';
         const _tp=extractTimerPending();
-        const _backupLabels=[...labels],_backupCd=[...countdowns],_backupCu=[...countups];
+        const _backupTodos=[...todos],_backupLabels=[...labels],_backupCd=[...countdowns],_backupCu=[...countups];
         clearAllData();
         pullFromCloud().then(()=>{
+          if(todos.length===0&&_backupTodos.length>0){todos=_backupTodos;saveTodos();}
           if(labels.length===0&&_backupLabels.length>0){labels=_backupLabels;saveLabels();}
           if(countdowns.length===0&&_backupCd.length>0){countdowns=_backupCd;saveCd();}
           if(countups.length===0&&_backupCu.length>0){countups=_backupCu;saveCu();}
