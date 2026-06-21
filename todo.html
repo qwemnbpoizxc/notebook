@@ -301,7 +301,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.20-04</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.21-01</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1286,10 +1286,16 @@ function buildTags(t,done){
 }
 
 // =================== 操作 ===================
+function freshTodoId(){
+  let id=Date.now();
+  const seen=new Set(todos.map(t=>t.id));
+  while(seen.has(id))id++;
+  return id;
+}
 function addTodo(){
   const tx=todoInput.value.trim();if(!tx){todoInput.focus();return;}
   if(currentTaskType==='weekly'&&pickedWeekDays.size===0){alert('请至少选择一个重复的星期');return;}
-  const nt={id:Date.now(),text:tx,type:currentTaskType,done:false,doneDate:null,doneDates:[],createdDate:realToday(),label:'',timeLogs:[]};
+  const nt={id:freshTodoId(),text:tx,type:currentTaskType,done:false,doneDate:null,doneDates:[],createdDate:realToday(),label:'',timeLogs:[],_lastEdit:Date.now()};
   if(currentTaskType==='once')nt.date=getViewStr();
   else if(currentTaskType==='weekly')nt.weekDays=[...pickedWeekDays];
   todos.unshift(nt);
@@ -1607,12 +1613,17 @@ fileInput.addEventListener('change',()=>{
       else if(raw&&typeof raw==='object'){iT=raw.todos||[];iCd=raw.countdowns||[];iCu=raw.countups||[];iL=raw.labels||[];}
       else throw new Error('格式不正确');
       const total=iT.length+iCd.length+iCu.length;
+      // Dedup imported data: remove internal duplicates
+      const dedup=iT=>{const s=new Set(),r=[];for(const t of iT){if(!s.has(t.id)){s.add(t.id);r.push(t);}}return r;};
+      iT=dedup(iT);iCd=dedup(iCd);iCu=dedup(iCu);
+      // Migrate: ensure _lastEdit and doneDates exist
+      for(const t of iT){if(!t._lastEdit)t._lastEdit=t.id||Date.now();if(!t.doneDates)t.doneDates=[];}
       if(total===0){showToast('⚠️ 文件中没有记录');return;}
       if(!confirm(`即将导入：计划${iT.length}+倒计时${iCd.length}+纪念日${iCu.length}\n\n"确定"覆盖全部\n"取消"合并`)){
         const sT=new Set(todos.map(t=>t.id)),sCd=new Set(countdowns.map(c=>c.id)),sCu=new Set(countups.map(c=>c.id));
-        todos.unshift(...iT.filter(x=>!sT.has(x.id)));
-        countdowns.unshift(...iCd.filter(x=>!sCd.has(x.id)));
-        countups.unshift(...iCu.filter(x=>!sCu.has(x.id)));
+        for(const x of iT){if(!sT.has(x.id))todos.unshift(x);else{const ix=todos.findIndex(t=>t.id===x.id);if(ix>=0)todos[ix]=x;}}
+        for(const x of iCd){if(!sCd.has(x.id))countdowns.unshift(x);}
+        for(const x of iCu){if(!sCu.has(x.id))countups.unshift(x);}
         if(iL.length>0)labels=iL;
         showToast('✅ 已合并导入');
       }else{todos=iT;countdowns=iCd;countups=iCu;if(iL.length>0)labels=iL;showToast('✅ 已覆盖导入');}
@@ -1770,7 +1781,6 @@ async function sbGet(table,eqCol,eqVal){
 let _cloudVersion=parseInt(localStorage.getItem('_cloud_version')||'0',10)||0;
 
 async function pushToCloud(){
-  return; // 🔧 云端推送已临时关闭
   if(!currentUser||currentUser==='__guest__')return;
   // Pull current cloud state, merge timeLogs (keep larger), then push
   const cloudRows=await sbGet('user_data','user_id',currentUser);
