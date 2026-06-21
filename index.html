@@ -307,6 +307,7 @@
     <button id="loginBtn">登 录</button>
     <button id="guestBtn" style="margin-top:6px;background:#EBE8E6;color:#5C5957;border:1.5px solid #D5D2D0;">👤 访客模式（仅本地存储）</button>
     <div class="login-err" id="loginErr"></div>
+    <button id="recoveryBtn" style="margin-top:10px;background:#E8F0E8;color:#5C5C5C;border:1.5px solid #C5D5C5;font-size:12px;border-radius:6px;padding:6px 12px;cursor:pointer;">💾 导出本地数据（无需登录）</button>
   </div>
 </div>
 
@@ -1650,6 +1651,13 @@ const loginErr=document.getElementById('loginErr');
 loginBtn.addEventListener('click',doLogin);
 loginPass.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 document.getElementById('guestBtn').addEventListener('click',enterGuest);
+document.getElementById('recoveryBtn').addEventListener('click',()=>{
+  const backup={todos:JSON.parse(localStorage.getItem('my_plan_list_v2')||'[]'),labels:JSON.parse(localStorage.getItem('my_labels')||'[]'),countdowns:JSON.parse(localStorage.getItem('my_countdowns')||'[]'),countups:JSON.parse(localStorage.getItem('my_countups')||'[]')};
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='notebook-backup.json';
+  a.click();
+  alert('✅ 已导出！共 '+backup.todos.length+' 个事项、'+backup.labels.length+' 个标签、'+backup.countdowns.length+' 个倒计时、'+backup.countups.length+' 个纪念日');
+});
 
 function clearAllData(){
   todos=[];countdowns=[];countups=[];labels=[];
@@ -1659,12 +1667,14 @@ function clearAllData(){
   localStorage.removeItem('my_labels');
 }
 
-function enterGuest(){logoutBtn.style.display='none';
+function enterGuest(){alert('⚠️ 请先用"导出本地数据"按钮备份数据，再点访客模式');
+  // 🔧 clearAllData() 已关闭
+  logoutBtn.style.display='none';
   currentUser='__guest__';sessionToken='';
   localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
   loginOverlay.style.display='none';
   const _tp=extractTimerPending();
-  clearAllData();
+  // clearAllData(); -- 已禁用，防止丢失数据
   applyPendingTimer(_tp);
   storageIndicator.textContent='👤 访客模式（仅本地）';
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
