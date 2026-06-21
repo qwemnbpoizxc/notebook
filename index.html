@@ -1701,7 +1701,7 @@ async function doLogin(){
       }
       applyPendingTimer(_tp);
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-      syncToCloud();
+      // 🔧 syncToCloud(); 已关闭
       todoInput.focus();
       _initSessionCheck(u);
     }
@@ -1760,6 +1760,7 @@ async function sbGet(table,eqCol,eqVal){
 let _cloudVersion=parseInt(localStorage.getItem('_cloud_version')||'0',10)||0;
 
 async function pushToCloud(){
+  return; // 🔧 云端推送已临时关闭
   if(!currentUser||currentUser==='__guest__')return;
   // Pull current cloud state, merge timeLogs (keep larger), then push
   const cloudRows=await sbGet('user_data','user_id',currentUser);
@@ -1861,15 +1862,15 @@ function saveTodos(){saveList(SK,todos);}
 
 let _syncTimer=null;
 function syncToCloud(){
-  clearTimeout(_syncTimer);
-  _syncTimer=setTimeout(pushToCloud,1500);
+  // 🔧 自动同步已关闭
+  return;
 }
 
-// Hook renders (only sync if logged in)
-const _rt=renderTodo;renderTodo=function(){_rt();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
-const _rc=renderCd;renderCd=function(){_rc();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
-const _rcu=renderCu;renderCu=function(){_rcu();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
-const _rp=renderPie;renderPie=function(){_rp();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+// 🔧 渲染挂钩已关闭
+// const _rt=renderTodo;renderTodo=function(){_rt();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+// const _rc=renderCd;renderCd=function(){_rc();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+// const _rcu=renderCu;renderCu=function(){_rcu();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+// const _rp=renderPie;renderPie=function(){_rp();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
 
 // Logout button in footer (show when logged in, hide for guest)
 const logoutBtn=document.createElement('button');
