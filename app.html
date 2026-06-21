@@ -466,6 +466,12 @@ const SK='my_plan_list_v2';
 function loadList(k){try{const r=localStorage.getItem(k);return r?JSON.parse(r):[];}catch{return[];}}
 function saveList(k,v){localStorage.setItem(k,JSON.stringify(v));}
 let todos=loadList(SK);
+// 已删除ID记录：防止云端合并时复活已删除的事项
+let _deleted_ids=new Set(JSON.parse(localStorage.getItem('_deleted_ids')||'[]').map(x=>typeof x==='object'?x.id:x));
+function _addToDeleted(id){_deleted_ids.add(id);localStorage.setItem('_deleted_ids',JSON.stringify([..._deleted_ids]));}
+function _mergeDeleted(arr){for(const x of arr){_deleted_ids.add(typeof x==='object'?x.id:x);}_saveDeleted();}
+function _saveDeleted(){localStorage.setItem('_deleted_ids',JSON.stringify([..._deleted_ids]));}
+
 
 // =================== 标签 ===================
 const DEF_LABELS=[{id:1,name:'数学',color:'#8B9E82'},{id:2,name:'英语',color:'#C49E9E'},{id:3,name:'编程',color:'#8A9BAD'},{id:4,name:'阅读',color:'#C4A882'}];
@@ -1345,6 +1351,8 @@ function deleteTodo(id){
 function clearDone(){
   if(!todos.some(t=>t.type==='once'&&t.done)&&!todos.some(t=>t.type!=='once'&&isTaskDoneOnDate(t))){alert('没有已完成的事项可以清除');return;}
   if(!confirm('确定清除已完成事项？\n\n• 一次性：永久删除\n• 每日/每周：仅清除今天完成状态'))return;
+  const deletedIds=todos.filter(t=>t.type==='once'&&t.done).map(t=>t.id);
+  for(const id of deletedIds)_addToDeleted(id);
   todos=todos.filter(t=>!(t.type==='once'&&t.done));
   for(const t of todos){if(t.type!=='once'&&t.doneDates){const vs=getViewStr();const idx=t.doneDates.indexOf(vs);if(idx>=0)t.doneDates.splice(idx,1);t._lastEdit=Date.now();}}
   saveTodos();renderTodo();
@@ -1379,7 +1387,7 @@ todoList.addEventListener('dblclick',e=>{
     const t=todos.find(x=>x.id===Number(i.dataset.id));
     if(t&&t.type!=='once'){
       if(confirm('永久删除"'+t.text+'"？（此操作不可撤销）')){
-        todos=todos.filter(x=>x.id!==t.id);saveTodos();renderTodo();
+        todos=todos.filter(x=>x.id!==t.id);_addToDeleted(t.id);saveTodos();renderTodo();
         showToast('🗑 已永久删除：'+t.text);
       }
     }
@@ -1407,7 +1415,7 @@ todoList.addEventListener('click',e=>{
   if(a==='toggle')toggleTodo(id);
   else if(a==='delete'){
     const t=todos.find(x=>x.id===id);if(!t)return;
-    if(t.type==='once'){if(confirm('确定永久删除"'+t.text+'"？')){todos=todos.filter(x=>x.id!==id);saveTodos();renderTodo();}}
+    if(t.type==='once'){if(confirm('确定永久删除"'+t.text+'"？')){todos=todos.filter(x=>x.id!==id);_addToDeleted(id);saveTodos();renderTodo();}}
     else{clearTimeout(_delTimeout);_delTimeout=setTimeout(()=>deleteTodo(id),300);}
   }
   else if(a==='timerToggle'){
@@ -1820,7 +1828,7 @@ async function pushToCloud(){
       }
       return t;
     });
-    for(const[,ct]of Object.entries(cmap))mergedTds.push(ct);
+    for(const[,ct]of Object.entries(cmap)){if(!_deleted_ids.has(ct.id))mergedTds.push(ct);}
   }
   // 合并 labels：本地为主，但保留云端有而本地没有的标签
   let mergedLabels=labels;
@@ -1837,13 +1845,17 @@ async function pushToCloud(){
     console.warn('⚠️ 本地todos为空，拒绝覆盖云端数据');
     storageIndicator.textContent='⚠️ 同步被阻止 (本地数据异常)';return;
   }
+    // 合并云端删除记录
+  if(cloudRows&&cloudRows.length>0&&cloudRows[0].data&&cloudRows[0].data._deleted_ids){
+    _mergeDeleted(cloudRows[0].data._deleted_ids);
+  }
   const cloudTodoCount=cloudRows&&cloudRows.length>0&&cloudRows[0].data&&cloudRows[0].data.todos?cloudRows[0].data.todos.length:0;
   if(cloudTodoCount>10&&mergedTds.length<cloudTodoCount*0.5){
     console.warn('⚠️ todos数量异常减少，拒绝覆盖');
     storageIndicator.textContent='⚠️ 同步被阻止 (数据异常减少)';return;
   }
   const newVersion=Math.max(cloudVersion||0,_cloudVersion||0)+1;
-  const payload={_version:newVersion,todos:mergedTds,countdowns,countups,labels:mergedLabels,updatedAt:Date.now()};
+  const payload={_version:newVersion,todos:mergedTds,countdowns,countups,labels:mergedLabels,_deleted_ids:[..._deleted_ids],updatedAt:Date.now()};
   // 合并后写回全局 todos，确保本地和云端一致
   todos=mergedTds;
   saveTodos();
@@ -1881,8 +1893,10 @@ async function pullFromCloud(){
         delete cmap[t.id];
       }
     }
-    for(const[_,ct]of Object.entries(cmap))todos.push(ct);
+    for(const[_,ct]of Object.entries(cmap)){if(!_deleted_ids.has(ct.id))todos.push(ct);}
   }
+    // 同步云端删除记录
+  if(rd._deleted_ids&&Array.isArray(rd._deleted_ids)){_mergeDeleted(rd._deleted_ids);}
   if(rd.countdowns&&Array.isArray(rd.countdowns)&&rd.countdowns.length>0)countdowns=rd.countdowns;
   if(rd.countups&&Array.isArray(rd.countups)&&rd.countups.length>0)countups=rd.countups;
   if(rd.labels&&Array.isArray(rd.labels)&&rd.labels.length>0)labels=rd.labels;
