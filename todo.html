@@ -45,7 +45,7 @@
   .block-badge.cu{background:#C49E9E;}
   /* Input area */
   .input-area{padding:10px 16px;border-bottom:1px solid #EBE8E6;flex-shrink:0;}
-  .input-area.locked{opacity:0.75;}
+  .input-area.locked{display:none;}
   .input-row{display:flex;gap:5px;margin-bottom:6px;}
   .input-row input[type="text"]{flex:1;padding:7px 10px;border:2px solid #D5D2D0;border-radius:8px;font-size:15px;outline:none;transition:border-color .2s;}
   .input-row input[type="text"]:focus{border-color:#8E9AAF;}
@@ -604,7 +604,7 @@ function updateViewDateUI(){
   if(isViewingToday()){D.classList.remove('other-date');B.classList.add('hidden');}
   else{D.classList.add('other-date');B.classList.remove('hidden');}
   document.querySelector('.col-center .input-area').classList.toggle('locked',vStr<rToday);
-  dateDisplay.textContent=vStr<rToday?'📅 补录：'+fmtViewCN():'📅 查看：'+fmtViewCN();
+  dateDisplay.textContent=vStr<rToday?'🔒 '+fmtViewCN()+'（只读）':'📅 查看：'+fmtViewCN();
 }
 
 // =================== 饼图 ===================
