@@ -301,7 +301,7 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.20-03</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.20-04</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
@@ -1668,14 +1668,12 @@ function clearAllData(){
   localStorage.removeItem('my_labels');
 }
 
-function enterGuest(){alert('⚠️ 请先用"导出本地数据"按钮备份数据，再点访客模式');
-  // 🔧 clearAllData() 已关闭
-  logoutBtn.style.display='none';
+function enterGuest(){logoutBtn.style.display='none';
   currentUser='__guest__';sessionToken='';
   localStorage.removeItem('sync_user');localStorage.removeItem('sync_token');
   loginOverlay.style.display='none';
   const _tp=extractTimerPending();
-  // clearAllData(); -- 已禁用，防止丢失数据
+  clearAllData()
   applyPendingTimer(_tp);
   storageIndicator.textContent='👤 访客模式（仅本地）';
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
@@ -1712,7 +1710,7 @@ async function doLogin(){
       }
       applyPendingTimer(_tp);
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-      // 🔧 syncToCloud(); 已关闭
+      syncToCloud();
       todoInput.focus();
       _initSessionCheck(u);
     }
@@ -1873,15 +1871,14 @@ function saveTodos(){saveList(SK,todos);}
 
 let _syncTimer=null;
 function syncToCloud(){
-  // 🔧 自动同步已关闭
-  return;
+  clearTimeout(_syncTimer);
+  _syncTimer=setTimeout(pushToCloud,1500);
 }
 
-// 🔧 渲染挂钩已关闭
-// const _rt=renderTodo;renderTodo=function(){_rt();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
-// const _rc=renderCd;renderCd=function(){_rc();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
-// const _rcu=renderCu;renderCu=function(){_rcu();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
-// const _rp=renderPie;renderPie=function(){_rp();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+const _rt=renderTodo;renderTodo=function(){_rt();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+const _rc=renderCd;renderCd=function(){_rc();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+const _rcu=renderCu;renderCu=function(){_rcu();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+const _rp=renderPie;renderPie=function(){_rp();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
 
 // Logout button in footer (show when logged in, hide for guest)
 const logoutBtn=document.createElement('button');
@@ -2084,14 +2081,37 @@ function _cleanupSession(uname){
 // =================== 初始化 ===================
 (function init(){
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
-  // 🔧 自动登录临时关闭，勿删此行
-  loginUser.focus();return;
   // 自动登录：检查是否有有效 session
-  // const savedUser=localStorage.getItem('sync_user');
-  // const savedToken=localStorage.getItem('sync_token');
-  // if(savedUser&&savedToken){
-// 🔧 自动登录已关闭
-
+  const savedUser=localStorage.getItem('sync_user');
+  const savedToken=localStorage.getItem('sync_token');
+  if(savedUser&&savedToken){
+    verifySession().then(loggedIn=>{
+      if(loggedIn){
+        // 自动恢复登录
+        loginOverlay.style.display='none';
+        logoutBtn.style.display='';
+        logoutBtn.textContent='👤 '+savedUser+'（退出）';
+        storageIndicator.textContent='☁️ 加载中…';
+        const _tp=extractTimerPending();
+        pullFromCloud().then(()=>{
+          applyPendingTimer(_tp);
+          renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+          syncToCloud();
+          todoInput.focus();
+          _initSessionCheck(savedUser);
+        }).catch(()=>{
+          applyPendingTimer(_tp);
+          renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
+          storageIndicator.textContent='⚠️ 离线 (云端不可达)';
+          todoInput.focus();_initSessionCheck(savedUser);
+        });
+      }else{
+        loginUser.focus();
+      }
+    });
+  }else{
+    loginUser.focus();
+  }
 })();
 </script>
 </body>

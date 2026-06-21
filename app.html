@@ -262,6 +262,7 @@
   .login-card{
     background:#FDFBFA;border-radius:16px;padding:36px 32px;
     width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.2);text-align:center;
+    max-height:95vh;overflow-y:auto;
   }
   .login-card h2{font-size:22px;color:#2C2927;margin-bottom:6px;}
   .login-card .login-sub{font-size:13px;color:#908D8B;margin-bottom:20px;}
@@ -300,13 +301,14 @@
 <!-- ===== Login Overlay ===== -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
-    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.20-03</span></h2>
+    <h2>🔐 登录 <span style="font-size:11px;color:#C8C5C3;">v2026.06.20-04</span></h2>
     <p class="login-sub">输入账号密码以访问你的计划清单</p>
     <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
     <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
     <button id="loginBtn">登 录</button>
     <button id="guestBtn" style="margin-top:6px;background:#EBE8E6;color:#5C5957;border:1.5px solid #D5D2D0;">👤 访客模式（仅本地存储）</button>
     <div class="login-err" id="loginErr"></div>
+    <button id="recoveryBtn" style="margin-top:10px;background:#E8F0E8;color:#2C5C2C;border:2px solid #8B9E82;font-size:14px;border-radius:6px;padding:8px 16px;cursor:pointer;font-weight:600;">💾 导出本地数据（无需登录）</button>
   </div>
 </div>
 
@@ -1650,6 +1652,13 @@ const loginErr=document.getElementById('loginErr');
 loginBtn.addEventListener('click',doLogin);
 loginPass.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 document.getElementById('guestBtn').addEventListener('click',enterGuest);
+document.getElementById('recoveryBtn').addEventListener('click',()=>{
+  const backup={todos:JSON.parse(localStorage.getItem('my_plan_list_v2')||'[]'),labels:JSON.parse(localStorage.getItem('my_labels')||'[]'),countdowns:JSON.parse(localStorage.getItem('my_countdowns')||'[]'),countups:JSON.parse(localStorage.getItem('my_countups')||'[]')};
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='notebook-backup.json';
+  a.click();
+  alert('✅ 已导出！共 '+backup.todos.length+' 个事项、'+backup.labels.length+' 个标签、'+backup.countdowns.length+' 个倒计时、'+backup.countups.length+' 个纪念日');
+});
 
 function clearAllData(){
   todos=[];countdowns=[];countups=[];labels=[];
@@ -1862,16 +1871,15 @@ function saveTodos(){saveList(SK,todos);}
 
 let _syncTimer=null;
 function syncToCloud(){
-  return; // 🔧 自动同步已临时关闭
   clearTimeout(_syncTimer);
-  // _syncTimer=setTimeout(pushToCloud,1500);
+  _syncTimer=setTimeout(pushToCloud,1500);
 }
 
 // Hook renders (only sync if logged in)
-const _rt=renderTodo;renderTodo=function(){_rt();/* 🔧 sync disabled */};
-const _rc=renderCd;renderCd=function(){_rc();/* 🔧 sync disabled */};
-const _rcu=renderCu;renderCu=function(){_rcu();/* 🔧 sync disabled */};
-const _rp=renderPie;renderPie=function(){_rp();/* 🔧 sync disabled */};
+const _rt=renderTodo;renderTodo=function(){_rt();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+const _rc=renderCd;renderCd=function(){_rc();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+const _rcu=renderCu;renderCu=function(){_rcu();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
+const _rp=renderPie;renderPie=function(){_rp();if(currentUser&&currentUser!=='__guest__')syncToCloud();};
 
 // Logout button in footer (show when logged in, hide for guest)
 const logoutBtn=document.createElement('button');
