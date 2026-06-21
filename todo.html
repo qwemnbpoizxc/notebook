@@ -1320,6 +1320,7 @@ function addTodo(){
 
 function toggleTodo(id){
   const t=todos.find(t=>t.id===id);if(!t)return;
+  t._lastEdit=Date.now();
   if(t.type==='once'){t.done=!t.done;if(t.done)t.doneDate=getViewStr();else t.doneDate=null;}
   else{
     if(!t.doneDates)t.doneDates=[];
@@ -1328,7 +1329,7 @@ function toggleTodo(id){
     if(idx>=0)t.doneDates.splice(idx,1);
     else t.doneDates.push(vs);
   }
-  renderTodo();
+  saveTodos();renderTodo();
 }
 
 function deleteTodo(id){
@@ -1338,21 +1339,22 @@ function deleteTodo(id){
   if(!t.skipDates.includes(vs))t.skipDates.push(vs);
   // 同时清除当天完成状态
   if(t.doneDates){const idx=t.doneDates.indexOf(vs);if(idx>=0)t.doneDates.splice(idx,1);}
-  renderTodo();showToast(`⏭ 已跳过：${t.text}`);
+  t._lastEdit=Date.now();
+  saveTodos();renderTodo();showToast(`⏭ 已跳过：${t.text}`);
 }
 
 function clearDone(){
   if(!todos.some(t=>t.type==='once'&&t.done)&&!todos.some(t=>t.type!=='once'&&isTaskDoneOnDate(t))){alert('没有已完成的事项可以清除');return;}
   if(!confirm('确定清除已完成事项？\n\n• 一次性：永久删除\n• 每日/每周：仅清除今天完成状态'))return;
   todos=todos.filter(t=>!(t.type==='once'&&t.done));
-  for(const t of todos){if(t.type!=='once'&&t.doneDates){const vs=getViewStr();const idx=t.doneDates.indexOf(vs);if(idx>=0)t.doneDates.splice(idx,1);}}
-  renderTodo();
+  for(const t of todos){if(t.type!=='once'&&t.doneDates){const vs=getViewStr();const idx=t.doneDates.indexOf(vs);if(idx>=0){t.doneDates.splice(idx,1);t._lastEdit=Date.now();}}}
+  saveTodos();renderTodo();
 }
 
 function resetToday(){
   if(!confirm('确定重置今天所有完成状态吗？（任务不会被删除）'))return;
-  for(const t of todos){if(t.type==='once'&&t.done&&t.doneDate===getViewStr()){t.done=false;t.doneDate=null;}if(t.type!=='once'&&t.doneDates){const vs=getViewStr();const idx=t.doneDates.indexOf(vs);if(idx>=0)t.doneDates.splice(idx,1);}}
-  renderTodo();
+  for(const t of todos){if(t.type==='once'&&t.done&&t.doneDate===getViewStr()){t.done=false;t.doneDate=null;t._lastEdit=Date.now();}if(t.type!=='once'&&t.doneDates){const vs=getViewStr();const idx=t.doneDates.indexOf(vs);if(idx>=0){t.doneDates.splice(idx,1);t._lastEdit=Date.now();}}}
+  saveTodos();renderTodo();
 }
 
 function restoreSkipped(){
@@ -1363,8 +1365,9 @@ function restoreSkipped(){
   if(!confirm(`恢复以下 ${skipped.length} 个事项到当天？\n\n${names}\n（取消则不恢复）`))return;
   for(const t of skipped){
     t.skipDates=t.skipDates.filter(d=>d!==vs);
+    t._lastEdit=Date.now();
   }
-  renderTodo();showToast('🔙 已恢复 '+skipped.length+' 个事项');
+  saveTodos();renderTodo();showToast('🔙 已恢复 '+skipped.length+' 个事项');
 }
 
 // =================== 编辑 ===================
@@ -1377,7 +1380,7 @@ todoList.addEventListener('dblclick',e=>{
     const t=todos.find(x=>x.id===Number(i.dataset.id));
     if(t&&t.type!=='once'){
       if(confirm('永久删除"'+t.text+'"？（此操作不可撤销）')){
-        todos=todos.filter(x=>x.id!==t.id);renderTodo();
+        todos=todos.filter(x=>x.id!==t.id);saveTodos();renderTodo();
         showToast('🗑 已永久删除：'+t.text);
       }
     }
@@ -1394,7 +1397,7 @@ todoList.addEventListener('keydown',e=>{
     if(inp)saveEdit(editingId,inp.value);
   }else if(e.key==='Escape'&&editingId!==null){editingId=null;renderTodo();}
 });
-function saveEdit(id,nt){const tx=nt.trim();if(tx){const t=todos.find(t=>t.id===id);if(t)t.text=tx;}editingId=null;renderTodo();}
+function saveEdit(id,nt){const tx=nt.trim();if(tx){const t=todos.find(t=>t.id===id);if(t){t.text=tx;t._lastEdit=Date.now();}}editingId=null;saveTodos();renderTodo();}
 
 let _delTimeout=null;
 todoList.addEventListener('click',e=>{
