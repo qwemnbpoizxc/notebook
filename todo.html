@@ -1641,7 +1641,13 @@ fileInput.addEventListener('change',()=>{
         for(const x of iCu){if(!sCu.has(x.id))countups.unshift(x);}
         if(iL.length>0)labels=iL;
         showToast('✅ 已合并导入');
-      }else{todos=iT;countdowns=iCd;countups=iCu;if(iL.length>0)labels=iL;showToast('✅ 已覆盖导入');}
+      }else{todos=iT;countdowns=iCd;countups=iCu;if(iL.length>0)labels=iL;showToast('✅ 已覆盖导入');
+        // 覆盖后强制推送云端，版本号用时间戳确保不会被旧数据覆盖
+        if(currentUser&&currentUser!=='__guest__'){
+          _cloudVersion=Date.now();localStorage.setItem('_cloud_version',String(_cloudVersion));
+          pushToCloud();
+        }
+      }
       repairData();
       saveTodos();saveCd();saveCu();saveLabels();
       currentTypeFilter='all';currentStatusFilter='all';updateFilterUI();
@@ -1847,7 +1853,7 @@ async function pushToCloud(){
     storageIndicator.textContent='⚠️ 同步被阻止 (数据异常减少)';
     return;
   }
-  const newVersion=(cloudVersion||_cloudVersion||0)+1;
+  const newVersion=Math.max(cloudVersion||0,_cloudVersion||0)+1;
   const payload={_version:newVersion,todos:mergedTds,countdowns,countups,labels:mergedLabels,updatedAt:Date.now()};
   // 合并后写回全局 todos，确保本地和云端一致
   todos=mergedTds;

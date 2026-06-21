@@ -1839,7 +1839,7 @@ async function pushToCloud(){
     console.warn('⚠️ todos数量异常减少，拒绝覆盖');
     storageIndicator.textContent='⚠️ 同步被阻止 (数据异常减少)';return;
   }
-  const newVersion=(cloudVersion||_cloudVersion||0)+1;
+  const newVersion=Math.max(cloudVersion||0,_cloudVersion||0)+1;
   const payload={_version:newVersion,todos:mergedTds,countdowns,countups,labels:mergedLabels,updatedAt:Date.now()};
   // 合并后写回全局 todos，确保本地和云端一致
   todos=mergedTds;
