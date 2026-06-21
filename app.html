@@ -1404,7 +1404,7 @@ todoList.addEventListener('click',e=>{
   if(a==='toggle')toggleTodo(id);
   else if(a==='delete'){
     const t=todos.find(x=>x.id===id);if(!t)return;
-    if(t.type==='once'){if(confirm('确定永久删除"'+t.text+'"？')){todos=todos.filter(x=>x.id!==id);renderTodo();}}
+    if(t.type==='once'){if(confirm('确定永久删除"'+t.text+'"？')){todos=todos.filter(x=>x.id!==id);saveTodos();renderTodo();}}
     else{clearTimeout(_delTimeout);_delTimeout=setTimeout(()=>deleteTodo(id),300);}
   }
   else if(a==='timerToggle'){
