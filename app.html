@@ -1291,6 +1291,21 @@ function freshTodoId(){
   while(seen.has(id))id++;
   return id;
 }
+function repairData(){
+  // 修复重复ID和缺失字段，每次启动/导入后自动运行
+  const seen=new Set(),fixed=[],dups=[];
+  for(const t of todos){
+    if(seen.has(t.id)){ t.id=freshTodoId();dups.push(t); }
+    seen.add(t.id);
+    if(!t._lastEdit)t._lastEdit=t.id||Date.now();
+    if(!t.doneDates)t.doneDates=[];
+    if(!t.createdDate)t.createdDate=t.date||'2026-01-01';
+    if(t.label&&typeof t.label==='string'){const lb=labels.find(l=>l.name===t.label);t.label=lb?lb.id:0;}
+    if(!t.timeLogs)t.timeLogs=[];
+  }
+  if(dups.length>0){ saveTodos();console.warn('🔧 已修复 '+dups.length+' 个重复ID'); }
+  return dups.length;
+}
 function addTodo(){
   const tx=todoInput.value.trim();if(!tx){todoInput.focus();return;}
   if(currentTaskType==='weekly'&&pickedWeekDays.size===0){alert('请至少选择一个重复的星期');return;}
@@ -1625,6 +1640,7 @@ fileInput.addEventListener('change',()=>{
         if(iL.length>0)labels=iL;
         showToast('✅ 已合并导入');
       }else{todos=iT;countdowns=iCd;countups=iCu;if(iL.length>0)labels=iL;showToast('✅ 已覆盖导入');}
+      repairData();
       saveTodos();saveCd();saveCu();saveLabels();
       currentTypeFilter='all';currentStatusFilter='all';updateFilterUI();
       renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
@@ -2090,6 +2106,7 @@ function _cleanupSession(uname){
 
 // =================== 初始化 ===================
 (function init(){
+  repairData();saveTodos();
   renderTodo();renderCd();renderCu();renderPie();renderLabels();renderColorSwatches();
   // 自动登录：检查是否有有效 session
   const savedUser=localStorage.getItem('sync_user');
